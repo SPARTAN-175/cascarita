@@ -1,5 +1,5 @@
-// Configuración de la aplicación web CASCARITA.
-// Estos valores pertenecen al SDK web de Firebase; no son credenciales de administrador.
+// Configuración web original proporcionada para CASCARITA.
+// Proyecto: cascarita-platform
 export const firebaseConfig = {
   apiKey: "AIzaSyDJ9Y9veFvi0tzJv3sB-HmlQg",
   authDomain: "cascarita-platform.firebaseapp.com",
