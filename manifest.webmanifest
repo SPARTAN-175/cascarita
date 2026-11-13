@@ -1,0 +1,9 @@
+{
+  "name": "CASCARITA",
+  "short_name": "Cascarita",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#101d31",
+  "theme_color": "#101d31",
+  "description": "Donde comienza tu historia."
+}
