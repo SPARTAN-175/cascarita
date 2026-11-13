@@ -1,7 +1,6 @@
-// Configuración web original proporcionada para CASCARITA.
-// Proyecto: cascarita-platform
+// Configuración web de Firebase para CASCARITA.
 export const firebaseConfig = {
-  apiKey: "AIzaSyDJ9Y9veFvi0tzJv3sB-HmlQg",
+  apiKey: "AIzaSyDJY9uWc0TU6Uy9veFvi0tzJv3sB-HmlQg",
   authDomain: "cascarita-platform.firebaseapp.com",
   projectId: "cascarita-platform",
   storageBucket: "cascarita-platform.firebasestorage.app",
