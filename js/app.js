@@ -1,358 +1,44 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.5.0/firebase-app.js";
-import {
-  getAuth, onAuthStateChanged, createUserWithEmailAndPassword,
-  signInWithEmailAndPassword, signOut, updateProfile, getIdTokenResult
-} from "https://www.gstatic.com/firebasejs/12.5.0/firebase-auth.js";
-import {
-  getFirestore, doc, getDoc, setDoc, updateDoc, addDoc, collection, getDocs, serverTimestamp, query, where
-} from "https://www.gstatic.com/firebasejs/12.5.0/firebase-firestore.js";
-import { getStorage } from "https://www.gstatic.com/firebasejs/12.5.0/firebase-storage.js";
+import { getAuth,onAuthStateChanged,createUserWithEmailAndPassword,signInWithEmailAndPassword,signOut,updateProfile,getIdTokenResult,sendEmailVerification } from "https://www.gstatic.com/firebasejs/12.5.0/firebase-auth.js";
+import { getFirestore,doc,getDoc,setDoc,updateDoc,addDoc,collection,getDocs,query,where,orderBy,limit,serverTimestamp } from "https://www.gstatic.com/firebasejs/12.5.0/firebase-firestore.js";
+import { getStorage,ref as storageRef,uploadBytes,getDownloadURL } from "https://www.gstatic.com/firebasejs/12.5.0/firebase-storage.js";
+import { getFunctions,httpsCallable } from "https://www.gstatic.com/firebasejs/12.5.0/firebase-functions.js";
 import { firebaseConfig } from "./firebase-config.js";
 
-const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
-const db = getFirestore(app);
-const storage = getStorage(app);
+const app=initializeApp(firebaseConfig),auth=getAuth(app),db=getFirestore(app),storage=getStorage(app),functions=getFunctions(app,"us-east1");
+const FOUNDER_EMAIL="avengers_0077@hotmail.com";
+const ROLES=["Jugador","Entrenador","Árbitro","Preparador físico","Entrenador de porteros","Directivo","Administrador de club","Organizador deportivo","Aficionado"];
+const state={user:null,profile:{},claims:{},page:"Inicio",theme:localStorage.getItem("cascarita-theme")||"dark",leagues:[],selectedLeague:"",admin:false};
+const root=document.getElementById("app");
+const esc=v=>String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const initials=n=>String(n||"C").trim().split(/\s+/).slice(0,2).map(x=>x[0]||"").join("").toUpperCase();
+function toast(msg,type="info"){const host=document.getElementById("toast-root"),el=document.createElement("div");el.className=`toast ${type}`;el.textContent=msg;host.append(el);setTimeout(()=>el.classList.add("show"),10);setTimeout(()=>el.remove(),3600)}
+function theme(){document.documentElement.dataset.theme=state.theme;localStorage.setItem("cascarita-theme",state.theme)}theme();
+const roleList=()=>Array.isArray(state.profile.roles)?state.profile.roles:["Aficionado"];
+const isAdmin=()=>state.admin;
+function authView(){const reg=state.authMode==="register";root.innerHTML=`<main class="auth-layout"><section class="auth-art"><div class="auth-brand"><div class="brand-mark">⚽</div><div><b>CASCARITA</b><small>DONDE COMIENZA TU HISTORIA</small></div></div><div class="art-copy"><div class="eyebrow"><i></i> EL FÚTBOL NOS UNE</div><h1>Tu historia<br><em>comienza</em><br>en la cancha.</h1><p>Noticias, ligas, equipos y talento. Todo el fútbol de nuestra comunidad en un solo lugar.</p><div class="art-motto"><span>DEL BARRIO A LA CANCHA.</span><span>DE LA PASIÓN AL PROGRESO.</span></div></div><div class="giant-ball">⚽</div><div class="art-foot">CASCARITA · FÚTBOL CON FUTURO</div></section><section class="auth-side"><div class="auth-card"><div class="eyebrow green">${reg?"ÚNETE A LA COMUNIDAD":"BIENVENIDO DE NUEVO"}</div><h2>${reg?"Crea tu cuenta.":"Inicia sesión."}</h2><p class="sub">${reg?"Todos comienzan como aficionados. Tu camino puede crecer.":"Entra para seguir tu fútbol."}</p><div id="auth-error" class="form-error" hidden></div><form id="auth-form">${reg?'<label>Nombre completo<input name="name" required minlength="2" maxlength="90"></label>':''}<label>Correo electrónico<input name="email" type="email" required></label><label>Contraseña<input name="password" type="password" minlength="6" required></label><button class="btn-primary full">${reg?"Crear cuenta":"Entrar"} →</button></form><div class="auth-switch">${reg?"¿Ya tienes cuenta?":"¿Aún no tienes cuenta?"} <button id="switch-auth">${reg?"Inicia sesión":"Regístrate"}</button></div></div></section></main>`;
+ document.getElementById("switch-auth").onclick=()=>{state.authMode=reg?"login":"register";authView()};document.getElementById("auth-form").onsubmit=async e=>{e.preventDefault();const f=new FormData(e.currentTarget),email=String(f.get("email")).trim().toLowerCase(),password=String(f.get("password")),name=String(f.get("name")||"").trim(),b=e.currentTarget.querySelector("button");b.disabled=true;try{let cred;if(reg){cred=await createUserWithEmailAndPassword(auth,email,password);await updateProfile(cred.user,{displayName:name});await sendEmailVerification(cred.user);toast("Te enviamos un correo para verificar tu cuenta.");await setDoc(doc(db,"users",cred.user.uid),{displayName:name,email,roles:["Aficionado"],createdAt:serverTimestamp(),updatedAt:serverTimestamp()});}else cred=await signInWithEmailAndPassword(auth,email,password);}catch(err){document.getElementById("auth-error").hidden=false;document.getElementById("auth-error").textContent=err.message;}finally{b.disabled=false}}}
+function navItems(){const base=[["Inicio","⌂"],["Competiciones","🏆"],["Clubes","⬟"],["Jugadores","♟"],["Mi perfil","♙"]];if(roleList().some(r=>r!=="Aficionado"))base.push(["Mis paneles","▣"]);if(isAdmin())base.push(["Administración","⚙"]);return base}
+function shell(){const items=navItems(),name=state.profile.displayName||state.user.displayName||"Aficionado",current=items.find(x=>x[0]===state.page)||items[0];root.innerHTML=`<div class="app-shell"><aside class="sidebar"><div class="sidebar-brand"><div class="brand-mark">⚽</div><div><b>CASCARITA</b><small>FÚTBOL CON FUTURO</small></div></div><div class="side-caption">COMUNIDAD DE FÚTBOL</div><div class="nav-caption">EXPLORAR</div><nav>${items.map(([n,i])=>`<button class="nav-item ${state.page===n?"active":""}" data-page="${n}"><span class="nav-symbol">${i}</span>${n}</button>`).join("")}</nav><div class="side-bottom"><div class="help-card"><b>Donde comienza tu historia</b><span>El fútbol nos conecta.</span></div><div class="account-row"><div class="avatar">${state.profile.photoURL?`<img src="${esc(state.profile.photoURL)}">`:initials(name)}</div><div class="account-text"><b>${esc(name)}</b><small>${esc(state.user.email)}</small></div><button id="logout" class="logout">↗</button></div></div></aside><main class="main"><header class="topbar"><div class="crumb">CASCARITA <span>/</span> <b>${current[0]}</b></div><div class="top-actions"><button class="round-btn" id="theme-toggle">${state.theme==="dark"?"☀":"☾"}</button><div class="top-avatar">${state.profile.photoURL?`<img src="${esc(state.profile.photoURL)}">`:initials(name)}</div></div></header><div class="page"><div class="page-heading"><div><div class="eyebrow green">${isAdmin()?"ADMINISTRACIÓN CENTRAL":"FÚTBOL CON FUTURO"}</div><h1>${current[0]==="Inicio"?`Hola, ${esc(name.split(" ")[0])}`:current[0]}</h1><p>${current[0]==="Inicio"?"Sigue tus ligas, descubre partidos y vive el fútbol de tu comunidad.":"Tu espacio en CASCARITA."}</p></div><div class="season">● ${isAdmin()?"SUPERADMINISTRADOR":"AFICIONADO"}</div></div><div id="page-content"></div><footer class="footer">© 2026 CASCARITA · DONDE COMIENZA TU HISTORIA</footer></div></main></div>`;
+ root.querySelectorAll("[data-page]").forEach(b=>b.onclick=()=>{state.page=b.dataset.page;renderPage()});document.getElementById("logout").onclick=()=>signOut(auth);document.getElementById("theme-toggle").onclick=()=>{state.theme=state.theme==="dark"?"light":"dark";theme();shell();renderPage()};renderPage()}
+function renderPage(){const host=document.getElementById("page-content");if(!host)return;host.innerHTML='<div class="muted">Cargando...</div>';({Inicio:homePage,Competiciones:leaguesPage,Clubes:clubsPage,Jugadores:playersPage,"Mi perfil":profilePage,"Mis paneles":panelsPage,Administración:adminPage}[state.page]||homePage)().then(html=>{if(document.getElementById("page-content"))document.getElementById("page-content").innerHTML=html;bindPage()}).catch(e=>{console.error(e);host.innerHTML='<div class="panel">No fue posible cargar esta sección. Revisa tu conexión y los permisos de Firebase.</div>'})}
+async function loadLeagues(){const s=await getDocs(query(collection(db,"leagues"),where("status","==","active")));state.leagues=s.docs.map(d=>({id:d.id,...d.data()}));if(!state.selectedLeague&&state.leagues.length)state.selectedLeague=state.leagues[0].id;return state.leagues}
+async function homePage(){const leagues=await loadLeagues();let news=[];try{const s=await getDocs(query(collection(db,"news"),where("published","==",true),limit(5)));news=s.docs.map(d=>d.data())}catch{}return `${String(state.user.email||"").toLowerCase()===FOUNDER_EMAIL&&!isAdmin()?`<section class="panel founder-setup"><div><div class="eyebrow green">CUENTA FUNDADORA</div><h3>${state.user.emailVerified?"Activa tu administración central":"Verifica tu correo para activar la administración"}</h3><p>El permiso se asigna desde Firebase y solo a la cuenta fundadora verificada.</p></div>${state.user.emailVerified?`<button class="btn-primary" id="claim-founder">Activar superadministrador →</button>`:`<button class="btn-primary" id="send-verify">Enviar verificación →</button>`}</section>`:""}<section class="public-hero"><div><div class="eyebrow green">EL FÚTBOL DE TODOS</div><h2>La pasión de tu comunidad,<br><em>en una sola cancha.</em></h2><p>Encuentra tu liga, sigue a tus equipos y no te pierdas ningún encuentro.</p><button class="btn-primary" data-go="Competiciones">Explorar competiciones →</button></div><div class="hero-ball">⚽</div></section><section class="panel"><div class="panel-head"><div><div class="eyebrow green">ELIGE QUÉ QUIERES SEGUIR</div><h3>Competiciones activas</h3></div><span class="panel-icon">🏆</span></div>${leagues.length?`<div class="league-grid">${leagues.map(l=>`<article class="league-card"><span class="league-tag">${esc(l.branch||"Fútbol 11")}</span><h3>${esc(l.name)}</h3><p>${esc(l.city||"")} · ${esc(l.season||"Temporada actual")}</p><button class="btn-secondary" data-league="${l.id}">Ver competición →</button></article>`).join("")}</div>`:'<div class="empty-state">Todavía no hay competiciones activas. Pronto podrás seguir aquí las ligas de tu comunidad.</div>'}</section><section class="panel"><div class="panel-head"><div><div class="eyebrow green">ACTUALIDAD</div><h3>Noticias y comunicados</h3></div></div>${news.length?news.map(n=>`<article class="news-row"><b>${esc(n.title)}</b><p>${esc(n.body||"")}</p></article>`).join(""):'<div class="empty-state">Las noticias oficiales aparecerán aquí cuando las organizaciones publiquen información.</div>'}</section>`}
+async function leaguesPage(){const ls=await loadLeagues();return `<section class="panel"><div class="panel-head"><div><div class="eyebrow green">TEMPORADAS Y TORNEOS</div><h3>Todas las competiciones activas</h3></div></div>${ls.length?`<div class="league-grid">${ls.map(l=>`<article class="league-card"><span class="league-tag">${esc(l.branch||"Fútbol 11")}</span><h3>${esc(l.name)}</h3><p>${esc(l.city||"")} · ${esc(l.season||"")}</p><button class="btn-secondary" data-league="${l.id}">Consultar liga →</button></article>`).join("")}</div>`:'<div class="empty-state">No hay ligas activas todavía.</div>'}</section><div id="league-detail"></div>`}
+async function clubsPage(){const s=await getDocs(query(collection(db,"teams"),where("status","==","active"),limit(50)));return `<section class="panel"><div class="panel-head"><div><div class="eyebrow green">EQUIPOS REGISTRADOS</div><h3>Clubes y equipos</h3></div></div>${s.empty?'<div class="empty-state">Los equipos aparecerán aquí cuando una liga los registre.</div>':`<div class="league-grid">${s.docs.map(d=>{const x=d.data();return `<article class="league-card"><h3>${esc(x.name)}</h3><p>${esc(x.branch||"")} · ${esc(x.city||"")}</p><small>${esc(x.leagueName||"")}</small></article>`}).join("")}</div>`}</section>`}
+async function playersPage(){const s=await getDocs(query(collection(db,"players"),where("visibility","==","public"),limit(40)));return `<section class="panel"><div class="panel-head"><div><div class="eyebrow green">TALENTO DE LA COMUNIDAD</div><h3>Directorio de jugadores</h3></div></div>${s.empty?'<div class="empty-state">Los jugadores que habiliten su perfil público aparecerán aquí.</div>':`<div class="league-grid">${s.docs.map(d=>{const x=d.data();return `<article class="league-card"><h3>${esc(x.displayName||"Jugador")}</h3><p>${esc(x.position||"Posición por definir")} · ${esc(x.city||"")}</p></article>`}).join("")}</div>`}</section>`}
+async function profilePage(){const p=state.profile,u=state.user;return `<section class="panel form-panel"><div class="panel-head"><div><div class="eyebrow green">TU IDENTIDAD</div><h3>Mi perfil</h3></div></div><form id="profile-form" class="data-form"><div class="photo-uploader"><div class="profile-photo">${p.photoURL?`<img src="${esc(p.photoURL)}">`:initials(p.displayName||u.displayName||u.email)}</div><div><b>Fotografía de perfil</b><p>JPG, PNG o WEBP · máximo 5 MB</p><input type="file" id="profile-photo" accept="image/jpeg,image/png,image/webp"></div></div><label>Nombre completo<input name="displayName" required maxlength="90" value="${esc(p.displayName||u.displayName||"")}"></label><label>Correo<input disabled value="${esc(u.email)}"></label><label>Teléfono<input name="phone" value="${esc(p.phone||"")}" maxlength="25"></label><label>Municipio / ciudad<input name="city" value="${esc(p.city||"")}" maxlength="80"></label><label class="wide">Presentación<textarea name="bio" rows="3" maxlength="500">${esc(p.bio||"")}</textarea></label><div class="wide"><b>Mis roles</b><p class="muted">Todos comienzan como aficionados. Puedes solicitar perfiles adicionales; los roles que requieren validación se habilitan al ser aprobados.</p><div class="role-chips">${roleList().map(r=>`<span>${esc(r)}</span>`).join("")}</div><label>Solicitar otro rol<select name="roleRequest"><option value="">Selecciona un rol</option>${ROLES.filter(r=>!roleList().includes(r)&&r!=="Aficionado").map(r=>`<option>${esc(r)}</option>`).join("")}</select></label></div><div class="wide form-actions"><button class="btn-primary">Guardar perfil</button></div></form></section>`}
+async function panelsPage(){const roles=roleList().filter(r=>r!=="Aficionado");return `<section class="panel"><div class="panel-head"><div><div class="eyebrow green">TUS HERRAMIENTAS</div><h3>Paneles disponibles</h3></div></div>${roles.length?`<div class="role-panel-grid">${roles.map(r=>`<article class="league-card"><span class="panel-icon">${r==="Jugador"?"♟":r==="Árbitro"?"⚑":"▣"}</span><h3>${esc(r)}</h3><p>Herramientas y funciones de tu perfil ${esc(r.toLowerCase())}.</p><button class="btn-secondary" data-role-panel="${esc(r)}">Abrir panel →</button></article>`).join("")}</div>`:'<div class="empty-state">Todavía no tienes roles deportivos adicionales. Desde Mi perfil puedes solicitar uno. Mientras tanto puedes seguir explorando todas las competiciones como aficionado.</div>'}<div id="role-panel-detail"></div></section>`}
+async function adminPage(){if(!isAdmin())return '<div class="panel">No tienes autorización para acceder.</div>';const [us,ls,ts,req]=await Promise.all([getDocs(collection(db,"users")),getDocs(collection(db,"leagues")),getDocs(collection(db,"teams")),getDocs(query(collection(db,"roleRequests"),where("status","==","pending")))]);return `<section class="panel"><div class="eyebrow green">CONTROL TOTAL</div><h3>Administración central</h3><p>Permisos de superadministración activos para esta cuenta.</p></section><section class="stats"><article class="stat"><small>Usuarios</small><strong>${us.size}</strong></article><article class="stat"><small>Ligas</small><strong>${ls.size}</strong></article><article class="stat"><small>Equipos</small><strong>${ts.size}</strong></article><article class="stat"><small>Solicitudes de rol</small><strong>${req.size}</strong></article></section><section class="panel form-panel"><div class="panel-head"><div><div class="eyebrow green">NUEVA COMPETICIÓN</div><h3>Crear liga o torneo</h3></div></div><form id="league-form" class="data-form"><label>Nombre de la liga<input name="name" required maxlength="100" placeholder="Liga Municipal de Ostuacán"></label><label>Temporada<input name="season" required placeholder="2026-2027"></label><label>Municipio / cobertura<input name="city" required></label><label>Rama<select name="branch"><option>Varonil</option><option>Femenil</option><option>Juvenil</option><option>Mixta / formativa</option></select></label><label>Formato<select name="format"><option>Liga</option><option>Torneo</option><option>Copa</option></select></label><label>Estado<select name="status"><option value="active">Activa</option><option value="draft">En preparación</option></select></label><div class="wide"><button class="btn-primary">Crear competición →</button></div></form></section><section class="panel form-panel"><div class="panel-head"><div><div class="eyebrow green">ESTRUCTURA DE COMPETICIÓN</div><h3>Registrar equipo en una liga</h3></div></div><form id="team-form" class="data-form"><label>Competición<select name="leagueId" required>${ls.docs.map(d=>`<option value="${d.id}">${esc(d.data().name)}</option>`).join("")}</select></label><label>Nombre del equipo<input name="name" required maxlength="100"></label><label>Municipio<input name="city"></label><label>Rama<input name="branch" placeholder="Varonil / Femenil / Juvenil"></label><div class="wide"><button class="btn-primary" ${ls.empty?"disabled":""}>Agregar equipo →</button></div></form></section><section class="panel form-panel"><div class="panel-head"><div><div class="eyebrow green">PLANTILLAS</div><h3>Vincular jugador a un equipo</h3></div></div><form id="roster-form" class="data-form"><label>Equipo<select name="teamId" required>${ts.docs.map(d=>`<option value="${d.id}">${esc(d.data().name)} — ${esc(d.data().leagueName||"")}</option>`).join("")}</select></label><label>Correo del jugador<input name="email" type="email" required placeholder="jugador@correo.com"></label><label>Posición<input name="position" placeholder="Delantero, defensa..."></label><div class="wide"><button class="btn-primary" ${ts.empty?"disabled":""}>Vincular jugador →</button></div></form></section><section class="panel form-panel"><div class="panel-head"><div><div class="eyebrow green">CALENDARIO</div><h3>Programar encuentro o registrar resultado</h3></div></div><form id="match-form" class="data-form"><label>Liga<select name="leagueId" required>${ls.docs.map(d=>`<option value="${d.id}">${esc(d.data().name)}</option>`).join("")}</select></label><label>Local<select name="homeTeam" required>${ts.docs.map(d=>`<option value="${d.id}">${esc(d.data().name)}</option>`).join("")}</select></label><label>Visitante<select name="awayTeam" required>${ts.docs.map(d=>`<option value="${d.id}">${esc(d.data().name)}</option>`).join("")}</select></label><label>Fecha y hora<input type="datetime-local" name="kickoff" required></label><label>Estado<select name="status"><option value="scheduled">Programado</option><option value="final">Finalizado</option></select></label><label>Goles local<input type="number" name="homeGoals" min="0" max="99" value="0"></label><label>Goles visitante<input type="number" name="awayGoals" min="0" max="99" value="0"></label><div class="wide"><button class="btn-primary" ${ts.size<2?"disabled":""}>Guardar encuentro →</button></div></form></section><section class="panel form-panel"><div class="panel-head"><div><div class="eyebrow green">COMUNICACIÓN OFICIAL</div><h3>Publicar noticia</h3></div></div><form id="news-form" class="data-form"><label>Titular<input name="title" required maxlength="120"></label><label class="wide">Contenido<textarea name="body" rows="3" required maxlength="2000"></textarea></label><div class="wide"><button class="btn-primary">Publicar noticia →</button></div></form></section><section class="panel"><div class="panel-head"><div><div class="eyebrow green">GESTIÓN DE ACCESO</div><h3>Solicitudes de roles</h3></div></div><div id="role-requests">${req.empty?'<div class="empty-state">No hay solicitudes pendientes.</div>':req.docs.map(d=>{const x=d.data();return `<div class="history-row"><div><b>${esc(x.role)}</b><small>${esc(x.email||"")} · ${esc(x.name||"")}</small></div><button class="btn-secondary" data-approve-role="${d.id}">Aprobar</button></div>`}).join("")}</div></section>`}
+function bindPage(){const verify=document.getElementById("send-verify");if(verify)verify.onclick=async()=>{try{await sendEmailVerification(state.user);toast("Correo de verificación enviado.")}catch(e){toast("No se pudo enviar el correo de verificación.","warning")}};const claim=document.getElementById("claim-founder");if(claim)claim.onclick=async()=>{claim.disabled=true;try{await httpsCallable(functions,"claimFounderSuperadmin")();await auth.currentUser.getIdToken(true);toast("Superadministración activada. Actualizando sesión...");location.reload()}catch(e){console.error(e);toast("No se pudo activar. Verifica el correo y despliega la función de Firebase.","warning");claim.disabled=false}};const go=document.querySelector("[data-go]");if(go)go.onclick=()=>{state.page=go.dataset.go;renderPage()};document.querySelectorAll("[data-league]").forEach(b=>b.onclick=()=>showLeague(b.dataset.league));const pf=document.getElementById("profile-form");if(pf)pf.onsubmit=saveProfile;const photo=document.getElementById("profile-photo");if(photo)photo.onchange=uploadPhoto;const lf=document.getElementById("league-form");if(lf)lf.onsubmit=createLeague;const tf=document.getElementById("team-form");if(tf)tf.onsubmit=createTeam;const rf=document.getElementById("roster-form");if(rf)rf.onsubmit=addPlayer;const mf=document.getElementById("match-form");if(mf)mf.onsubmit=createMatch;const nf=document.getElementById("news-form");if(nf)nf.onsubmit=createNews;document.querySelectorAll("[data-approve-role]").forEach(b=>b.onclick=()=>approveRole(b.dataset.approveRole));document.querySelectorAll("[data-role-panel]").forEach(b=>b.onclick=()=>{const host=document.getElementById("role-panel-detail");host.innerHTML=`<div class="notice-soft"><b>${esc(b.dataset.rolePanel)}:</b> tu panel está habilitado. Las herramientas específicas se irán incorporando conectadas a los datos y permisos de tu perfil.</div>`})}
+async function saveProfile(e){e.preventDefault();const f=new FormData(e.currentTarget),name=String(f.get("displayName")).trim(),role=String(f.get("roleRequest")||"");try{await updateDoc(doc(db,"users",state.user.uid),{displayName:name,phone:String(f.get("phone")||""),city:String(f.get("city")||""),bio:String(f.get("bio")||""),updatedAt:serverTimestamp()});await updateProfile(state.user,{displayName:name});state.profile={...state.profile,displayName:name,phone:f.get("phone"),city:f.get("city"),bio:f.get("bio")};if(role){await addDoc(collection(db,"roleRequests"),{uid:state.user.uid,email:state.user.email,name,role,status:"pending",createdAt:serverTimestamp()});toast("Perfil guardado y solicitud de rol enviada.")}else toast("Perfil actualizado.");renderPage()}catch(e){console.error(e);toast("No se pudo guardar. Revisa las reglas de Firestore.","warning")}}
+async function uploadPhoto(e){const file=e.target.files?.[0];if(!file)return;if(!["image/jpeg","image/png","image/webp"].includes(file.type)||file.size>5*1024*1024){toast("Elige JPG, PNG o WEBP de máximo 5 MB.","warning");return}try{const path=`profilePhotos/${state.user.uid}/avatar-${Date.now()}`;const r=storageRef(storage,path);await uploadBytes(r,file,{contentType:file.type});const url=await getDownloadURL(r);await updateDoc(doc(db,"users",state.user.uid),{photoURL:url,photoPath:path,updatedAt:serverTimestamp()});state.profile.photoURL=url;toast("Fotografía actualizada.");renderPage()}catch(err){console.error(err);toast("No se pudo subir la foto. Revisa Storage Rules.","warning")}}
+async function createLeague(e){e.preventDefault();const f=new FormData(e.currentTarget);try{await addDoc(collection(db,"leagues"),{name:String(f.get("name")).trim(),season:String(f.get("season")).trim(),city:String(f.get("city")).trim(),branch:String(f.get("branch")),format:String(f.get("format")),status:String(f.get("status")),createdBy:state.user.uid,createdAt:serverTimestamp()});toast("Competición creada.");renderPage()}catch(err){console.error(err);toast("No se pudo crear la liga. Verifica permisos.","warning")}}
+async function createTeam(e){e.preventDefault();const f=new FormData(e.currentTarget),league=state.leagues.find(x=>x.id===f.get("leagueId"))||await getDoc(doc(db,"leagues",String(f.get("leagueId"))));const l=league.data?league.data():league;try{await addDoc(collection(db,"teams"),{leagueId:String(f.get("leagueId")),leagueName:l.name,name:String(f.get("name")).trim(),city:String(f.get("city")||""),branch:String(f.get("branch")||""),status:"active",createdBy:state.user.uid,createdAt:serverTimestamp()});toast("Equipo agregado a la competición.");renderPage()}catch(err){console.error(err);toast("No se pudo registrar el equipo.","warning")}}
+async function addPlayer(e){e.preventDefault();const f=new FormData(e.currentTarget),email=String(f.get("email")).trim().toLowerCase();try{const u=await getDocs(query(collection(db,"users"),where("email","==",email),limit(1)));if(u.empty){toast("No encontramos una cuenta con ese correo.","warning");return}const player=u.docs[0],teamId=String(f.get("teamId")),team=await getDoc(doc(db,"teams",teamId));await setDoc(doc(db,"teams",teamId,"roster",player.id),{uid:player.id,email,displayName:player.data().displayName||"",position:String(f.get("position")||""),joinedAt:serverTimestamp(),status:"active"});await setDoc(doc(db,"players",player.id),{uid:player.id,displayName:player.data().displayName||"",position:String(f.get("position")||""),city:player.data().city||"",visibility:"public",teamId,teamName:team.data().name,leagueId:team.data().leagueId,updatedAt:serverTimestamp()},{merge:true});toast("Jugador vinculado al equipo y su liga.");renderPage()}catch(err){console.error(err);toast("No se pudo vincular. Revisa reglas o índice.","warning")}}
+async function createMatch(e){e.preventDefault();const f=new FormData(e.currentTarget),leagueId=String(f.get("leagueId")),homeId=String(f.get("homeTeam")),awayId=String(f.get("awayTeam"));if(homeId===awayId){toast("Elige dos equipos diferentes.","warning");return}try{const [h,a,l]=await Promise.all([getDoc(doc(db,"teams",homeId)),getDoc(doc(db,"teams",awayId)),getDoc(doc(db,"leagues",leagueId))]);if(!h.exists()||!a.exists()||!l.exists()||h.data().leagueId!==leagueId||a.data().leagueId!==leagueId)throw new Error("Los dos equipos deben pertenecer a la liga seleccionada.");const status=String(f.get("status"));await addDoc(collection(db,"matches"),{leagueId,leagueName:l.data().name,homeTeam:h.data().name,awayTeam:a.data().name,homeTeamId:homeId,awayTeamId:awayId,kickoff:new Date(String(f.get("kickoff"))),status,homeGoals:status==="final"?Number(f.get("homeGoals")):null,awayGoals:status==="final"?Number(f.get("awayGoals")):null,createdBy:state.user.uid,createdAt:serverTimestamp()});toast("Encuentro guardado.");renderPage()}catch(err){console.error(err);toast(err.message||"No se pudo guardar el encuentro.","warning")}}
+async function createNews(e){e.preventDefault();const f=new FormData(e.currentTarget);try{await addDoc(collection(db,"news"),{title:String(f.get("title")).trim(),body:String(f.get("body")).trim(),published:true,authorUid:state.user.uid,createdAt:serverTimestamp()});toast("Noticia publicada.");renderPage()}catch(err){console.error(err);toast("No se pudo publicar la noticia.","warning")}}
+async function approveRole(id){try{const r=await getDoc(doc(db,"roleRequests",id));if(!r.exists())throw new Error("Solicitud no encontrada");const x=r.data();await updateDoc(doc(db,"roleRequests",id),{status:"approved",reviewedAt:serverTimestamp(),reviewedBy:state.user.uid});const u=await getDoc(doc(db,"users",x.uid));if(u.exists()){const roles=Array.isArray(u.data().roles)?u.data().roles:["Aficionado"];if(!roles.includes(x.role))await updateDoc(doc(db,"users",x.uid),{roles:[...roles,x.role],updatedAt:serverTimestamp()})}toast("Rol aprobado y habilitado en el perfil.");renderPage()}catch(e){console.error(e);toast("No se pudo aprobar. Revisa permisos.","warning")}}
+async function showLeague(id){const l=state.leagues.find(x=>x.id===id);if(!l)return;const [teams,matches]=await Promise.all([getDocs(query(collection(db,"teams"),where("leagueId","==",id))),getDocs(query(collection(db,"matches"),where("leagueId","==",id)))]);const host=document.getElementById("league-detail");if(!host)return;const standings={};teams.forEach(d=>standings[d.id]={name:d.data().name,pj:0,pg:0,pe:0,pp:0,gf:0,gc:0,pts:0});matches.forEach(d=>{const m=d.data();if(m.status!=="final"||m.homeGoals==null||m.awayGoals==null||!standings[m.homeTeamId]||!standings[m.awayTeamId])return;const h=standings[m.homeTeamId],a=standings[m.awayTeamId];h.pj++;a.pj++;h.gf+=m.homeGoals;h.gc+=m.awayGoals;a.gf+=m.awayGoals;a.gc+=m.homeGoals;if(m.homeGoals>m.awayGoals){h.pg++;h.pts+=3;a.pp++}else if(m.homeGoals<m.awayGoals){a.pg++;a.pts+=3;h.pp++}else{h.pe++;a.pe++;h.pts++;a.pts++}});const table=Object.values(standings).sort((a,b)=>b.pts-a.pts||(b.gf-b.gc)-(a.gf-a.gc)||b.gf-a.gf);host.innerHTML=`<section class="panel"><div class="eyebrow green">${esc(l.season||"")}</div><h2>${esc(l.name)}</h2><p>${esc(l.city||"")} · ${esc(l.branch||"")}</p><h3>Tabla de posiciones</h3>${table.length?`<div class="table-wrap"><table class="data-table"><thead><tr><th>#</th><th>Equipo</th><th>PJ</th><th>PG</th><th>PE</th><th>PP</th><th>GF</th><th>GC</th><th>PTS</th></tr></thead><tbody>${table.map((t,i)=>`<tr><td>${i+1}</td><td>${esc(t.name)}</td><td>${t.pj}</td><td>${t.pg}</td><td>${t.pe}</td><td>${t.pp}</td><td>${t.gf}</td><td>${t.gc}</td><td><b>${t.pts}</b></td></tr>`).join("")}</tbody></table></div>`:'<div class="empty-state">La tabla se calculará conforme se registren equipos y resultados validados.</div>'}<h3>Equipos participantes</h3>${teams.empty?'<div class="empty-state">Todavía no hay equipos inscritos.</div>':teams.docs.map(d=>`<div class="history-row"><b>${esc(d.data().name)}</b><small>${esc(d.data().branch||"")}</small></div>`).join("")}<h3>Encuentros</h3>${matches.empty?'<div class="empty-state">Todavía no hay encuentros programados.</div>':matches.docs.map(d=>{const m=d.data();return `<div class="history-row"><div><b>${esc(m.homeTeam)} vs ${esc(m.awayTeam)}</b><small>${m.kickoff?.toDate?m.kickoff.toDate().toLocaleString("es-MX"):"Fecha por confirmar"}</small></div><strong>${m.status==="final"?`${m.homeGoals} - ${m.awayGoals}`:"Programado"}</strong></div>`}).join("")}</section>`}
 
-const state = { user: null, userProfile: {}, isAdmin: false, page: "Inicio", theme: localStorage.getItem("cascarita-theme") || "light", authMode: "login" };
-const root = document.getElementById("app");
-
-const nav = [
-  ["Inicio","⌂","Resumen de tu actividad deportiva"],
-  ["Jugadores","♟","Perfiles y desarrollo de jugadores"],
-  ["Clubes","⬟","Clubes, plantillas y cuerpos técnicos"],
-  ["Competiciones","🏆","Ligas, torneos y temporadas"],
-  ["Directorio","◎","Encuentra talento y profesionales"],
-  ["Credenciales","▣","Identificación deportiva verificable"],
-  ["Mi perfil","♙","Tu información personal en CASCARITA"],
-  ["Solicitudes","✉","Solicita registrar un club u organización"]
-];
-
-function esc(value="") {
-  return String(value).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
-}
-function initials(name="C") {
-  return name.trim().split(/\s+/).slice(0,2).map(x=>x[0]||"").join("").toUpperCase() || "C";
-}
-function toast(message, type="info") {
-  const host = document.getElementById("toast-root");
-  const el = document.createElement("div");
-  el.className = `toast ${type}`;
-  el.textContent = message;
-  host.append(el);
-  setTimeout(()=>el.classList.add("show"),10);
-  setTimeout(()=>{el.classList.remove("show");setTimeout(()=>el.remove(),250)},3600);
-}
-function setTheme(theme) {
-  state.theme = theme;
-  document.documentElement.dataset.theme = theme;
-  localStorage.setItem("cascarita-theme", theme);
-}
-setTheme(state.theme);
-
-function authView() {
-  const register = state.authMode === "register";
-  root.innerHTML = `
-  <main class="auth-layout">
-    <section class="auth-art">
-      <div class="auth-brand"><div class="brand-mark">⚽</div><div><b>CASCARITA</b><small>DONDE COMIENZA TU HISTORIA</small></div></div>
-      <div class="art-copy">
-        <div class="eyebrow"><i></i> EL FÚTBOL NOS UNE</div>
-        <h1>Tu historia<br><em>comienza</em><br>en la cancha.</h1>
-        <p>Una comunidad para descubrir talento, organizar clubes y llevar el fútbol de nuestra gente más lejos.</p>
-        <div class="art-motto"><span>DEL BARRIO A LA CANCHA.</span><span>DE LA PASIÓN AL PROGRESO.</span></div>
-      </div>
-      <div class="giant-ball">⚽</div>
-      <div class="art-foot">CASCARITA <span>•</span> FÚTBOL CON FUTURO</div>
-    </section>
-    <section class="auth-side">
-      <div class="mobile-brand auth-brand"><div class="brand-mark">⚽</div><div><b>CASCARITA</b><small>DONDE COMIENZA TU HISTORIA</small></div></div>
-      <div class="auth-card">
-        <div class="eyebrow green">BIENVENIDO A CASCARITA</div>
-        <h2>${register ? "Únete a la comunidad." : "Qué bueno tenerte aquí."}</h2>
-        <p class="sub">${register ? "Crea tu cuenta y comienza tu historia deportiva." : "Inicia sesión para continuar tu camino."}</p>
-        <div id="auth-error" class="form-error" hidden></div>
-        <form id="auth-form">
-          ${register ? `<label>Nombre completo<input name="name" autocomplete="name" placeholder="Tu nombre" required minlength="2"></label>` : ""}
-          <label>Correo electrónico<input name="email" type="email" autocomplete="email" placeholder="nombre@correo.com" required></label>
-          <label>Contraseña<input name="password" type="password" autocomplete="${register?"new-password":"current-password"}" placeholder="Mínimo 6 caracteres" minlength="6" required></label>
-          <button class="btn-primary full" type="submit">${register?"Crear mi cuenta":"Iniciar sesión"} <span>→</span></button>
-        </form>
-        <div class="auth-switch">${register?"¿Ya formas parte de CASCARITA?":"¿Todavía no tienes cuenta?"} <button id="switch-auth">${register?"Inicia sesión":"Regístrate"}</button></div>
-        <div class="secure-note">♧ Tu cuenta se protege con Firebase Authentication.</div>
-      </div>
-      <div class="auth-copyright">© 2026 CASCARITA · DONDE COMIENZA TU HISTORIA</div>
-    </section>
-  </main>`;
-
-  document.getElementById("switch-auth").onclick = () => {
-    state.authMode = register ? "login" : "register";
-    authView();
-  };
-  document.getElementById("auth-form").onsubmit = async e => {
-    e.preventDefault();
-    const form = new FormData(e.currentTarget);
-    const email = String(form.get("email")).trim();
-    const password = String(form.get("password"));
-    const name = String(form.get("name") || "").trim();
-    const button = e.currentTarget.querySelector("button[type=submit]");
-    const error = document.getElementById("auth-error");
-    button.disabled = true; button.innerHTML = "Un momento...";
-    error.hidden = true;
-    try {
-      if (register) {
-        const cred = await createUserWithEmailAndPassword(auth,email,password);
-        await updateProfile(cred.user,{displayName:name});
-        // El perfil básico se crea en Firestore. Si las reglas aún no permiten
-        // esta operación, la cuenta Auth seguirá creada y se mostrará el aviso.
-        try {
-          await setDoc(doc(db,"users",cred.user.uid),{
-            displayName:name,email,createdAt:serverTimestamp(),updatedAt:serverTimestamp()
-          });
-        } catch (profileError) {
-          console.warn("Cuenta creada; perfil Firestore pendiente de reglas:",profileError);
-          toast("Cuenta creada. El perfil de Firestore requiere revisar sus reglas.","warning");
-        }
-      } else {
-        await signInWithEmailAndPassword(auth,email,password);
-      }
-    } catch (err) {
-      const messages = {
-        "auth/email-already-in-use":"Este correo ya tiene una cuenta.",
-        "auth/invalid-email":"El correo no tiene un formato válido.",
-        "auth/weak-password":"La contraseña debe tener al menos 6 caracteres.",
-        "auth/invalid-credential":"Correo o contraseña incorrectos.",
-        "auth/too-many-requests":"Demasiados intentos. Intenta más tarde.",
-        "auth/network-request-failed":"No se pudo conectar. Revisa tu conexión."
-      };
-      error.textContent = messages[err.code] || err.message || "No fue posible completar la operación.";
-      error.hidden = false;
-    } finally {
-      if (document.body.contains(button)) { button.disabled=false;button.innerHTML=`${register?"Crear mi cuenta":"Iniciar sesión"} <span>→</span>`; }
-    }
-  };
-}
-
-function shellView() {
-  const user = state.user;
-  const visibleNav = state.isAdmin ? [...nav,["Administración","⚙","Usuarios y solicitudes de la comunidad"]] : nav;
-  const current = visibleNav.find(n=>n[0]===state.page) || nav[0];
-  root.innerHTML = `
-  <div class="app-shell">
-    <aside class="sidebar" id="sidebar">
-      <div class="sidebar-brand"><div class="brand-mark">⚽</div><div><b>CASCARITA</b><small>FÚTBOL CON FUTURO</small></div></div>
-      <div class="side-caption">PLATAFORMA DE FÚTBOL</div>
-      <div class="nav-caption">MENÚ PRINCIPAL</div>
-      <nav>${visibleNav.map(([label,icon])=>`<button class="nav-item ${state.page===label?"active":""}" data-page="${label}"><span class="nav-symbol">${icon}</span>${label}${state.page===label?'<i></i>':""}</button>`).join("")}</nav>
-      <div class="side-bottom">
-        <div class="help-card"><b>¿Necesitas ayuda?</b><span>Estamos construyendo algo grande.</span></div>
-        <div class="account-row"><div class="avatar">${esc(initials(user.displayName||user.email))}</div><div class="account-text"><b>${esc(user.displayName||"Mi cuenta")}</b><small>${esc(user.email||"")}</small></div><button id="logout" class="logout" title="Cerrar sesión">↗</button></div>
-      </div>
-    </aside>
-    <div class="mobile-shade" id="mobile-shade"></div>
-    <main class="main">
-      <header class="topbar">
-        <button class="mobile-menu" id="mobile-menu">☰</button>
-        <div class="crumb">Plataforma <span>/</span> <b>${current[0]}</b></div>
-        <div class="top-actions">
-          <div class="search"><span>⌕</span><input id="search-input" placeholder="Buscar en CASCARITA..."></div>
-          <button class="round-btn" id="theme-toggle" title="Cambiar tema">${state.theme==="dark"?"☀":"☾"}</button>
-          <button class="round-btn bell" title="Notificaciones">♧<i></i></button>
-          <div class="top-avatar">${esc(initials(user.displayName||user.email))}</div>
-        </div>
-      </header>
-      <div class="page">
-        <div class="page-heading">
-          <div><div class="eyebrow green">TU ESPACIO DEPORTIVO</div><h1>${state.page==="Inicio"?'Bienvenido, <em>'+esc((user.displayName||"deportista").split(" ")[0])+'.</em>':state.page}</h1><p>${current[2]}</p></div>
-          <div class="season"><i></i> TEMPORADA · EN PREPARACIÓN</div>
-        </div>
-        ${state.page==="Inicio"?dashboard(user):state.page==="Mi perfil"?profilePage():state.page==="Solicitudes"?requestsPage():state.page==="Administración"&&state.isAdmin?adminPage():modulePage(state.page)}
-        <footer class="footer"><span>© 2026 CASCARITA</span><span>DEL BARRIO A LA CANCHA. DE LA PASIÓN AL PROGRESO.</span><span>v0.1.0</span></footer>
-      </div>
-    </main>
-  </div>`;
-
-  root.querySelectorAll("[data-page]").forEach(btn=>btn.onclick=()=>{state.page=btn.dataset.page;shellView();});
-  root.querySelectorAll("[data-action]").forEach(btn=>btn.onclick=()=>{state.page=btn.dataset.action==="profile"?"Mi perfil":"Solicitudes";shellView();});
-  bindProfileForm();
-  bindRequestForms();
-  bindAdminActions();
-
-  document.getElementById("logout").onclick=async()=>{await signOut(auth);toast("Sesión cerrada.");};
-  document.getElementById("theme-toggle").onclick=()=>{setTheme(state.theme==="dark"?"light":"dark");shellView();};
-  document.getElementById("mobile-menu").onclick=()=>{document.getElementById("sidebar").classList.add("open");document.getElementById("mobile-shade").classList.add("show");};
-  document.getElementById("mobile-shade").onclick=()=>{document.getElementById("sidebar").classList.remove("open");document.getElementById("mobile-shade").classList.remove("show");};
-}
-
-function dashboard(user) {
-  return `
-  <section class="hero-banner">
-    <div class="banner-content">
-      <div class="banner-label">✦ UNA NUEVA FORMA DE VIVIR EL FÚTBOL</div>
-      <h2>El siguiente paso<br>de tu historia <em>empieza aquí.</em></h2>
-      <p>Conecta con el fútbol, desarrolla tu talento y encuentra nuevas oportunidades.</p>
-      <button class="banner-cta" data-action="profile">Completar mi perfil <span>→</span></button>
-    </div>
-    <div class="pitch-art"><div class="pitch-inner"></div><div class="pitch-ball">⚽</div></div>
-    <div class="banner-count">01 <span>/ 04</span></div>
-  </section>
-  <section class="stats">
-    ${stat("♟","Jugadores","—","Perfiles por descubrir","green")}
-    ${stat("⬟","Clubes","—","Clubes de la comunidad","blue")}
-    ${stat("🏆","Competiciones","—","Próximamente","orange")}
-    ${stat("↗","Tu actividad","0","Tu camino comienza hoy","purple")}
-  </section>
-  <section class="lower-grid">
-    <article class="panel">
-      <div class="panel-head"><div><div class="eyebrow green">TU PERFIL</div><h3>Todo comienza contigo</h3></div><span class="panel-icon">♙</span></div>
-      <div class="profile-line"><div class="profile-avatar">${esc(initials(user.displayName||"C"))}</div><div><b>${esc(user.displayName||"Nuevo integrante")}</b><small>${esc(state.userProfile.city||"Completa tu información personal")}</small></div></div>
-      <div class="progress"><span></span></div><div class="progress-label"><span>Cuenta creada</span><b>25%</b></div>
-      <div class="success-note">✓ Tu cuenta ya forma parte de CASCARITA.</div>
-    </article>
-    <article class="panel">
-      <div class="panel-head"><div><div class="eyebrow green">EL CAMINO</div><h3>Lo que estamos construyendo</h3></div><span class="panel-icon">⚑</span></div>
-      <div class="roadmap">
-        ${road("✓","Fundación de la plataforma","Identidad, acceso y estructura inicial.",true)}
-        ${road("♟","Clubes y jugadores","Perfiles, plantillas y membresías.")}
-        ${road("🏆","Competiciones y partidos","Ligas, calendarios y actas.")}
-        ${road("✦","Evaluación y desarrollo","Medición y evolución deportiva.")}
-      </div>
-    </article>
-  </section>
-  <section class="discover"><div class="discover-head"><div><div class="eyebrow green">DESCUBRE CASCARITA</div><h3>Un ecosistema para crecer</h3></div><span>PRÓXIMAMENTE</span></div>
-    <div class="discover-grid">
-      ${quick("♟","Jugadores","Talento, posiciones y evolución.")}
-      ${quick("⬟","Clubes","Identidad, equipos y comunidad.")}
-      ${quick("🏆","Competiciones","Ligas, calendarios y resultados.")}
-      ${quick("◎","Directorio","Conecta con profesionales.")}
-      ${quick("▣","Credenciales","Identidad deportiva verificable.")}
-    </div>
-  </section>`;
-}
-function stat(icon,label,value,note,tone){return `<article class="stat"><div class="stat-icon ${tone}">${icon}</div><small>${label}</small><strong>${value}</strong><span>${note}</span></article>`;}
-function road(icon,title,desc,done=false){return `<div class="road-item ${done?"done":""}"><div class="road-icon">${icon}</div><div><b>${title}</b><small>${desc}</small></div><span class="road-state">${done?"LISTO":"EN PLAN"}</span></div>`;}
-function quick(icon,title,desc){return `<div class="quick-card"><span>${icon}</span><b>${title}</b><small>${desc}</small><i>→</i></div>`;}
-function modulePage(page){return `<section class="module-empty"><div class="module-emblem">⚽</div><div class="eyebrow green">MÓDULO EN CONSTRUCCIÓN</div><h2>${page}</h2><p>Estamos preparando este espacio para que funcione con datos reales, permisos adecuados y herramientas deportivas completas.</p><div class="module-points"><span>✓ Seguridad desde el diseño</span><span>✓ Datos verificables</span><span>✓ Comunidad deportiva</span></div><div class="module-foot">Esta sección se habilitará en una próxima entrega de CASCARITA.</div></section>`;}
-
-
-function profilePage(){
-  const p=state.userProfile||{}, user=state.user;
-  return `<section class="panel form-panel"><div class="panel-head"><div><div class="eyebrow green">IDENTIDAD PERSONAL</div><h3>Mi perfil</h3></div><span class="panel-icon">♙</span></div>
-  <p class="form-intro">Esta información forma parte de tu cuenta. Más adelante podrás vincular tu perfil con uno o varios roles deportivos.</p>
-  <form id="profile-form" class="data-form">
-    <label>Nombre completo<input name="displayName" required minlength="2" maxlength="90" value="${esc(p.displayName||user.displayName||"")}"></label>
-    <label>Correo electrónico<input value="${esc(user.email||"")}" disabled></label>
-    <label>Teléfono de contacto<input name="phone" maxlength="25" value="${esc(p.phone||"")}" placeholder="Tu número de contacto"></label>
-    <label>Municipio / ciudad<input name="city" maxlength="80" value="${esc(p.city||"")}" placeholder="Ej. Ostuacán, Chiapas"></label>
-    <label>¿Cómo participas en el fútbol?<select name="interest"><option value="">Selecciona una opción</option>${["Jugador","Entrenador","Árbitro","Directivo de club","Organizador","Aficionado","Otro"].map(x=>`<option ${p.interest===x?"selected":""}>${x}</option>`).join("")}</select></label>
-    <label class="wide">Presentación breve<textarea name="bio" maxlength="500" rows="4" placeholder="Cuéntanos un poco sobre ti...">${esc(p.bio||"")}</textarea></label>
-    <div class="wide form-actions"><button class="btn-primary" type="submit">Guardar perfil <span>→</span></button><small>Tu correo de acceso no se puede cambiar desde aquí.</small></div>
-  </form></section>`;
-}
-function requestsPage(){
- return `<section class="panel form-panel"><div class="panel-head"><div><div class="eyebrow green">CRECIMIENTO DE LA COMUNIDAD</div><h3>Solicitudes de registro</h3></div><span class="panel-icon">✉</span></div>
- <p class="form-intro">Si representas a un club o una organización deportiva, envía una solicitud. El equipo de CASCARITA deberá revisarla antes de habilitar su registro oficial.</p>
- <div class="request-grid">
-  <form id="club-request-form" class="request-card data-form"><div class="request-icon">⬟</div><h4>Registrar un club</h4>
-   <label>Nombre del club<input name="name" required maxlength="100" placeholder="Nombre oficial o conocido"></label>
-   <label>Municipio / ciudad<input name="city" required maxlength="80" placeholder="Municipio, estado"></label>
-   <label>Rama principal<select name="branch" required><option value="">Selecciona</option><option>Varonil</option><option>Femenil</option><option>Mixto / formativo</option></select></label>
-   <label>Tu relación con el club<input name="relationship" required maxlength="80" placeholder="Presidente, representante..."></label>
-   <label>Información adicional<textarea name="details" rows="3" maxlength="500"></textarea></label>
-   <button class="btn-primary" type="submit">Enviar solicitud <span>→</span></button>
-  </form>
-  <form id="org-request-form" class="request-card data-form"><div class="request-icon">🏆</div><h4>Registrar una organización</h4>
-   <label>Nombre de la organización<input name="name" required maxlength="120" placeholder="Liga, asociación, comité..."></label>
-   <label>Tipo de organización<select name="type" required><option value="">Selecciona</option><option>Liga</option><option>Organización deportiva</option><option>Comité municipal</option><option>Academia / escuela</option><option>Otra</option></select></label>
-   <label>Municipio / cobertura<input name="city" required maxlength="100" placeholder="Zona donde opera"></label>
-   <label>Tu cargo o relación<input name="relationship" required maxlength="80" placeholder="Presidente, secretario..."></label>
-   <label>Información adicional<textarea name="details" rows="3" maxlength="500"></textarea></label>
-   <button class="btn-primary" type="submit">Enviar solicitud <span>→</span></button>
-  </form>
- </div><div class="notice-soft">Enviar una solicitud no crea automáticamente un club ni concede permisos administrativos. Recibirás el resultado cuando sea revisado.</div>
- <div id="my-requests" class="request-history"><h4>Mis solicitudes</h4><div class="muted">Cargando solicitudes...</div></div>
- </section>`;
-}
-function adminPage(){
- return `<section class="admin-welcome"><div><div class="eyebrow">CONTROL DE LA PLATAFORMA</div><h2>Administración central</h2><p>Acceso concedido mediante permisos verificados por Firebase.</p></div><span class="admin-shield">⚙</span></section>
- <section class="stats admin-stats"><article class="stat"><div class="stat-icon green">♙</div><small>Usuarios registrados</small><strong id="admin-user-count">—</strong><span>Cuentas en CASCARITA</span></article><article class="stat"><div class="stat-icon blue">✉</div><small>Solicitudes pendientes</small><strong id="admin-pending-count">—</strong><span>Por revisar</span></article></section>
- <section class="panel admin-list"><div class="panel-head"><div><div class="eyebrow green">REVISIÓN Y VALIDACIÓN</div><h3>Solicitudes recibidas</h3></div><button class="btn-secondary" id="refresh-admin">Actualizar</button></div><div id="admin-requests"><div class="muted">Cargando información...</div></div></section>
- <section class="panel admin-list"><div class="panel-head"><div><div class="eyebrow green">COMUNIDAD</div><h3>Usuarios registrados</h3></div></div><div id="admin-users"><div class="muted">Cargando usuarios...</div></div></section>`;
-}
-function bindProfileForm(){
- const form=document.getElementById("profile-form"); if(!form)return;
- form.onsubmit=async e=>{
-  e.preventDefault();const b=form.querySelector("button");b.disabled=true;
-  const fd=new FormData(form);
-  const data={displayName:String(fd.get("displayName")).trim(),phone:String(fd.get("phone")).trim(),city:String(fd.get("city")).trim(),interest:String(fd.get("interest")).trim(),bio:String(fd.get("bio")).trim(),updatedAt:serverTimestamp()};
-  try{await updateDoc(doc(db,"users",state.user.uid),data);await updateProfile(state.user,{displayName:data.displayName});state.userProfile={...state.userProfile,...data};toast("Perfil actualizado correctamente.");shellView();}
-  catch(err){console.error(err);toast("No se pudo guardar. Revisa las reglas de Firestore.","warning");b.disabled=false;}
- };
-}
-function bindRequestForms(){
- const bind=(id,type)=>{
-  const form=document.getElementById(id);if(!form)return;
-  form.onsubmit=async e=>{
-   e.preventDefault();const b=form.querySelector("button");b.disabled=true;
-   const fd=new FormData(form);const payload={uid:state.user.uid,ownerEmail:state.user.email||"",name:String(fd.get("name")).trim(),city:String(fd.get("city")).trim(),relationship:String(fd.get("relationship")).trim(),details:String(fd.get("details")||"").trim(),type:type,status:"pending",createdAt:serverTimestamp()};
-   if(type==="club")payload.branch=String(fd.get("branch")||"");
-   else payload.organizationType=String(fd.get("type")||"");
-   try{await addDoc(collection(db,type==="club"?"clubRequests":"organizationRequests"),payload);form.reset();toast("Solicitud enviada para revisión.");loadMyRequests();}
-   catch(err){console.error(err);toast("No se pudo enviar. Revisa las reglas de Firestore.","warning");}
-   finally{b.disabled=false;}
-  };
- };
- bind("club-request-form","club");bind("org-request-form","organization");
- loadMyRequests();
-}
-async function loadMyRequests(){
- const host=document.getElementById("my-requests");if(!host)return;
- try{
-  const all=await Promise.all(["clubRequests","organizationRequests"].map(c=>getDocs(query(collection(db,c),where("uid","==",state.user.uid)))));
-  const rows=[];all.forEach((snap,i)=>snap.forEach(d=>{const x=d.data();if(x.uid===state.user.uid)rows.push({...x,id:d.id,collection:i===0?"clubRequests":"organizationRequests"});}));
-  rows.sort((a,b)=>(b.createdAt?.seconds||0)-(a.createdAt?.seconds||0));
-  host.innerHTML="<h4>Mis solicitudes</h4>"+(rows.length?rows.map(x=>`<div class="history-row"><div><b>${esc(x.name)}</b><small>${x.collection==="clubRequests"?"Club":"Organización"} · ${esc(x.city||"")}</small></div><span class="status-pill ${x.status==="approved"?"approved":x.status==="rejected"?"rejected":""}">${x.status==="approved"?"Aprobada":x.status==="rejected"?"Rechazada":"En revisión"}</span></div>`).join(""):'<div class="muted">Todavía no has enviado solicitudes.</div>');
- }catch(e){console.warn(e);host.innerHTML="<h4>Mis solicitudes</h4><div class='muted'>No fue posible consultar tus solicitudes. Revisa las reglas de Firestore.</div>";}
-}
-async function bindAdminActions(){
- if(state.page!=="Administración"||!state.isAdmin)return;
- const load=async()=>{
-  const reqHost=document.getElementById("admin-requests"),usersHost=document.getElementById("admin-users");if(!reqHost||!usersHost)return;
-  try{
-   const [clubs,orgs,users]=await Promise.all([getDocs(collection(db,"clubRequests")),getDocs(collection(db,"organizationRequests")),getDocs(collection(db,"users"))]);
-   const requests=[];clubs.forEach(d=>requests.push({...d.data(),id:d.id,collection:"clubRequests",kind:"Club"}));orgs.forEach(d=>requests.push({...d.data(),id:d.id,collection:"organizationRequests",kind:"Organización"}));
-   requests.sort((a,b)=>(b.createdAt?.seconds||0)-(a.createdAt?.seconds||0));
-   document.getElementById("admin-user-count").textContent=users.size;
-   document.getElementById("admin-pending-count").textContent=requests.filter(x=>x.status==="pending").length;
-   reqHost.innerHTML=requests.length?requests.map(x=>`<article class="admin-request"><div class="admin-request-main"><b>${esc(x.name)}</b><small>${x.kind} · ${esc(x.city||"")} · ${esc(x.ownerEmail||"")}</small><p>${esc(x.details||"Sin información adicional")}</p><span class="status-pill ${x.status==="approved"?"approved":x.status==="rejected"?"rejected":""}">${x.status==="approved"?"Aprobada":x.status==="rejected"?"Rechazada":"Pendiente"}</span></div>${x.status==="pending"?`<div class="admin-actions"><button class="btn-approve" data-review="${x.collection}|${x.id}|approved">Aprobar</button><button class="btn-reject" data-review="${x.collection}|${x.id}|rejected">Rechazar</button></div>`:""}</article>`).join(""):'<div class="muted">No hay solicitudes todavía.</div>';
-   usersHost.innerHTML=users.size?`<div class="table-wrap"><table class="data-table"><thead><tr><th>Usuario</th><th>Correo</th><th>Ciudad</th></tr></thead><tbody>${users.docs.map(d=>{const x=d.data();return `<tr><td>${esc(x.displayName||"Sin nombre")}</td><td>${esc(x.email||"")}</td><td>${esc(x.city||"—")}</td></tr>`}).join("")}</tbody></table></div>`:'<div class="muted">No hay usuarios registrados.</div>';
-  }catch(e){console.error(e);reqHost.innerHTML='<div class="form-error">No se pudo cargar la administración. Verifica que tu cuenta tenga el permiso admin y que las reglas estén instaladas.</div>';}
- };
- const host=document.getElementById("admin-requests");if(host&&!host.dataset.bound){host.dataset.bound="1";host.addEventListener("click",async e=>{const btn=e.target.closest("[data-review]");if(!btn)return;const [col,id,status]=btn.dataset.review.split("|");btn.disabled=true;try{await updateDoc(doc(db,col,id),{status,reviewedAt:serverTimestamp(),reviewedBy:state.user.uid});toast(status==="approved"?"Solicitud aprobada.":"Solicitud rechazada.");await load();}catch(err){console.error(err);toast("No se pudo actualizar. Verifica los permisos administrativos.","warning");btn.disabled=false;}});}
- const refresh=document.getElementById("refresh-admin");if(refresh)refresh.onclick=load;
- await load();
-}
-
-onAuthStateChanged(auth, async user => {
-  state.user = user;
-  if (user) {
-    try {
-      const token = await getIdTokenResult(user, true);
-      state.isAdmin = token.claims.admin === true;
-      const ref = doc(db,"users",user.uid);
-      const snap = await getDoc(ref);
-      if (!snap.exists()) {
-        await setDoc(ref,{displayName:user.displayName||"",email:user.email||"",createdAt:serverTimestamp(),updatedAt:serverTimestamp()});
-        state.userProfile = {displayName:user.displayName||"",email:user.email||""};
-      } else state.userProfile = snap.data();
-    } catch (e) {
-      console.warn("No se pudo sincronizar el perfil o consultar permisos:",e);
-      state.userProfile = {displayName:user.displayName||"",email:user.email||""};
-    }
-    if (!state.isAdmin && state.page==="Administración") state.page="Inicio";
-    shellView();
-  } else { state.isAdmin=false;state.userProfile={};authView(); }
-});
-
-// Evita que el navegador intente restaurar el scroll a una posición extraña.
-window.addEventListener("pageshow",()=>window.scrollTo(0,0));
+onAuthStateChanged(auth,async user=>{state.user=user;if(!user){state.admin=false;state.profile={};authView();return}try{const token=await getIdTokenResult(user,true);state.claims=token.claims;state.admin=token.claims.admin===true||token.claims.superadmin===true;const ref=doc(db,"users",user.uid),snap=await getDoc(ref);if(!snap.exists()){await setDoc(ref,{displayName:user.displayName||"",email:user.email||"",roles:["Aficionado"],createdAt:serverTimestamp(),updatedAt:serverTimestamp()});state.profile={displayName:user.displayName||"",email:user.email,roles:["Aficionado"]}}else state.profile=snap.data();if(!Array.isArray(state.profile.roles))state.profile.roles=["Aficionado"];state.page="Inicio";shell()}catch(e){console.error(e);toast("No se pudo cargar tu perfil o tus permisos.","warning");shell()}});
