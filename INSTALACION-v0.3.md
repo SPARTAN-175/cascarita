@@ -6,15 +6,16 @@ Descomprime este ZIP sobre la raíz del repositorio y reemplaza `js/app.js` y `c
 ## 2. Activar superadministración de la cuenta fundadora
 La aplicación no concede el permiso desde el navegador. La función `claimFounderSuperadmin` solo acepta la cuenta `avengers_0077@hotmail.com` cuando Firebase Authentication confirma que el correo está verificado.
 
-Despliegue inicial (una sola vez, desde una computadora con Node.js y Firebase CLI):
+Despliegue inicial (una sola vez, desde una computadora con Node.js 22 o 24 y Firebase CLI actualizado). Esta entrega usa Node.js 22; Node.js 20 ya no debe usarse para nuevas implementaciones.
 
 ```bash
 npm install -g firebase-tools
 firebase login
+cd ruta/a/tu/repositorio-cascarita
 firebase deploy --only functions:claimFounderSuperadmin
 ```
 
-El proyecto ya está fijado en `.firebaserc` como `cascarita-platform`; `firebase.json` limita este despliegue a Functions. Después, inicia sesión en CASCARITA con el correo fundador verificado. En Inicio aparecerá el botón para activar la superadministración. Al pulsarlo, se asignan los custom claims `admin` y `superadmin` desde el servidor.
+El proyecto ya está fijado en `.firebaserc` como `cascarita-platform`; `firebase.json` limita este despliegue a Functions. Si el despliegue termina con `Deploy complete!`, inicia sesión en CASCARITA con `avengers_0077@hotmail.com`, confirma que el correo esté verificado y pulsa el botón de activación en Inicio. La interfaz ahora mostrará el código y el mensaje real del error si algo falla. Al pulsarlo, se asignan los custom claims `admin` y `superadmin` desde el servidor.
 
 ## 3. Reglas de Firestore y Storage
 Los archivos `firestore.rules` y `storage.rules` están incluidos como propuesta para esta versión. Revísalos antes de publicarlos y reemplaza las reglas actuales solo cuando estés listo. No uses reglas abiertas. Las reglas de Firestore protegen la edición de roles y reservan ligas, equipos, noticias y resultados para administradores.
