@@ -45,3 +45,38 @@
 
 /* Selector de experiencia por rol */
 .mode-switch{display:flex;align-items:center;gap:8px;padding:5px 9px;border:1px solid var(--border);border-radius:10px;background:var(--surface)}.mode-label{font-size:9px;font-weight:900;letter-spacing:.12em;color:var(--accent)}.mode-switch select{max-width:145px;border:0;background:transparent;color:var(--text);font:700 11px inherit;outline:none}.mode-switch option{background:var(--surface);color:var(--text)}.manager-hero{box-shadow:0 14px 35px #0002}.manager-team{border-bottom:1px solid var(--border)}@media(max-width:600px){.mode-label{display:none}.mode-switch select{max-width:112px;font-size:10px}}
+
+/* CASCARITA · presentación deportiva inspirada en PES 2013 */
+.app-shell.mode-manager,.app-shell.mode-player{background:#080d16;color:#eef3f8;--surface:#111a27;--surface2:#172333;--line:#263447;--text:#edf3fa;--muted:#9aaabd;--green:#d4ad55;--greenSoft:#d4ad5520;--shadow:0 18px 48px #0008}
+.app-shell.mode-manager .sidebar,.app-shell.mode-player .sidebar{background:linear-gradient(180deg,#101a28 0%,#080e17 100%);border-right:1px solid #314052;box-shadow:8px 0 28px #0005}
+.app-shell.mode-manager .sidebar-brand b,.app-shell.mode-player .sidebar-brand b{color:#f5f7fa;letter-spacing:2.5px}
+.app-shell.mode-manager .brand-mark,.app-shell.mode-player .brand-mark{background:linear-gradient(145deg,#e5c36e,#87652c);color:#111;border-radius:7px}
+.app-shell.mode-manager .nav-item,.app-shell.mode-player .nav-item{border-radius:3px;text-transform:uppercase;font-size:10px;letter-spacing:.7px;height:42px}
+.app-shell.mode-manager .nav-item.active,.app-shell.mode-player .nav-item.active{background:linear-gradient(90deg,#d5ad5830,#d5ad5808);color:#f0ce7d;border-left:3px solid #d7b45f}
+.app-shell.mode-manager .topbar,.app-shell.mode-player .topbar{background:#0d1622;border-bottom:1px solid #334153;color:#eaf0f7}
+.app-shell.mode-manager .crumb,.app-shell.mode-player .crumb{color:#91a1b4}
+.app-shell.mode-manager .page,.app-shell.mode-player .page{max-width:1600px;padding-top:25px}
+.app-shell.mode-manager .page-heading,.app-shell.mode-player .page-heading{padding:17px 22px;margin:-1px 0 20px;background:linear-gradient(105deg,#1c2b3d,#101b2a 65%,#243449);border:1px solid #35475c;box-shadow:0 12px 35px #0005}
+.app-shell.mode-manager .page-heading h1,.app-shell.mode-player .page-heading h1{color:#f5f7fa;text-transform:uppercase;letter-spacing:1.1px;font-size:25px}
+.app-shell.mode-manager .page-heading p,.app-shell.mode-player .page-heading p{color:#aebccd}
+.app-shell.mode-manager .season,.app-shell.mode-player .season{background:#0a121d;border-color:#45566b;color:#e5c778;border-radius:3px}
+.app-shell.mode-manager .manager-hero,.app-shell.mode-player .manager-hero{min-height:245px;position:relative;overflow:hidden;padding:34px 38px;border:1px solid #59677a;border-radius:3px;color:#fff;background:linear-gradient(100deg,#101b29 0%,#17283a 53%,#26394c 100%);box-shadow:0 18px 38px #0007}
+.app-shell.mode-manager .manager-hero:before,.app-shell.mode-player .manager-hero:before{content:"";position:absolute;inset:0;background:radial-gradient(ellipse at 82% 50%,#d5b35a25,transparent 42%),linear-gradient(90deg,transparent 55%,#ffffff08);pointer-events:none}
+.app-shell.mode-manager .manager-hero h2,.app-shell.mode-player .manager-hero h2{font-size:clamp(28px,4vw,42px);text-transform:uppercase;letter-spacing:1px;text-shadow:0 3px 14px #0009}
+.app-shell.mode-manager .manager-hero p,.app-shell.mode-player .manager-hero p{color:#bdc9d7;max-width:560px}
+.app-shell.mode-manager .manager-ball,.app-shell.mode-player .manager-ball{filter:drop-shadow(0 18px 20px #0009);opacity:.85}
+.app-shell.mode-manager .panel,.app-shell.mode-player .panel,.app-shell.mode-manager .stat,.app-shell.mode-player .stat,.app-shell.mode-manager .league-card,.app-shell.mode-player .league-card{background:linear-gradient(145deg,#152233,#0e1723);border:1px solid #34465b;border-radius:3px;box-shadow:0 8px 22px #0004}
+.app-shell.mode-manager .panel-head h3,.app-shell.mode-player .panel-head h3,.app-shell.mode-manager .league-card h3,.app-shell.mode-player .league-card h3{color:#f0f4f8;text-transform:uppercase;letter-spacing:.6px}
+.app-shell.mode-manager .eyebrow.green,.app-shell.mode-player .eyebrow.green,.app-shell.mode-manager .eyebrow,.app-shell.mode-player .eyebrow{color:#dfbd6b}
+.app-shell.mode-manager .stat strong,.app-shell.mode-player .stat strong{color:#f4d27d}
+.app-shell.mode-manager .btn-primary,.app-shell.mode-player .btn-primary{background:linear-gradient(180deg,#e0c477,#a47c36);color:#17130b;border-radius:3px;box-shadow:0 4px 12px #0005;text-transform:uppercase;letter-spacing:.5px}
+.app-shell.mode-manager .btn-secondary,.app-shell.mode-player .btn-secondary{background:linear-gradient(180deg,#26384d,#182638);color:#e9eff6;border:1px solid #53677e;border-radius:3px;text-transform:uppercase;font-size:10px;letter-spacing:.4px}
+.app-shell.mode-manager input,.app-shell.mode-manager select,.app-shell.mode-manager textarea,.app-shell.mode-player input,.app-shell.mode-player select,.app-shell.mode-player textarea{background:#0a131f;color:#edf3f8;border:1px solid #3a4d63;border-radius:3px}
+.app-shell.mode-manager .history-row,.app-shell.mode-player .history-row{border-color:#2b3c50}
+.app-shell.mode-manager .mode-switch,.app-shell.mode-player .mode-switch{background:#111e2d;border:1px solid #46566a;border-radius:3px;padding:5px 8px}
+.app-shell.mode-manager .mode-label,.app-shell.mode-player .mode-label{color:#e5c779;font-weight:900;letter-spacing:1px}
+.app-shell.mode-manager #mode-switch,.app-shell.mode-player #mode-switch{color:#f2f5f8;background:#17283a;border:1px solid #50627a;border-radius:2px}
+.app-shell.mode-player .manager-hero{background:linear-gradient(105deg,#0d1d31,#183b5b 58%,#1d5272)}
+.app-shell.mode-player .manager-hero:before{background:radial-gradient(ellipse at 82% 50%,#55b8e533,transparent 42%)}
+.app-shell.mode-player .stat strong{color:#8fd3f2}
+@media(max-width:800px){.app-shell.mode-manager .page,.app-shell.mode-player .page{padding:18px 13px}.app-shell.mode-manager .manager-hero,.app-shell.mode-player .manager-hero{padding:24px 20px;min-height:190px}.app-shell.mode-manager .page-heading,.app-shell.mode-player .page-heading{padding:14px}}
