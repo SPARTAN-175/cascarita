@@ -80,3 +80,35 @@
 .app-shell.mode-player .manager-hero:before{background:radial-gradient(ellipse at 82% 50%,#55b8e533,transparent 42%)}
 .app-shell.mode-player .stat strong{color:#8fd3f2}
 @media(max-width:800px){.app-shell.mode-manager .page,.app-shell.mode-player .page{padding:18px 13px}.app-shell.mode-manager .manager-hero,.app-shell.mode-player .manager-hero{padding:24px 20px;min-height:190px}.app-shell.mode-manager .page-heading,.app-shell.mode-player .page-heading{padding:14px}}
+
+/* CASCARITA · presentación inspirada en PES 2013 Master League */
+.app-shell.mode-manager,.app-shell.mode-player{font-family:"Manrope","DM Sans",sans-serif;background:#070d16;color:#edf3fa}
+.app-shell.mode-manager .sidebar,.app-shell.mode-player .sidebar{background:linear-gradient(180deg,#111d2c 0%,#070c14 100%);border-right:1px solid #536276}
+.app-shell.mode-manager .sidebar-brand,.app-shell.mode-player .sidebar-brand{padding-bottom:22px;border-bottom:1px solid #354457}
+.app-shell.mode-manager .side-caption,.app-shell.mode-player .side-caption,.app-shell.mode-manager .nav-caption,.app-shell.mode-player .nav-caption{color:#b9a16a;letter-spacing:1.7px}
+.app-shell.mode-manager .nav-item,.app-shell.mode-player .nav-item{border-radius:2px;border-bottom:1px solid #263548;background:linear-gradient(90deg,#ffffff08,transparent);height:45px;color:#d4dce6;font-weight:800}
+.app-shell.mode-manager .nav-item.active,.app-shell.mode-player .nav-item.active{background:linear-gradient(90deg,#c8a85c35,#c8a85c08);border-left:3px solid #d9bb70;color:#f4d98f}
+.app-shell.mode-manager .topbar,.app-shell.mode-player .topbar{background:#0b1420;border-bottom:1px solid #3a4a5e}
+.app-shell.mode-manager .page-heading,.app-shell.mode-player .page-heading{background:linear-gradient(100deg,#24364b,#101c2b 62%,#34465a);border:1px solid #637186;box-shadow:inset 0 1px #ffffff1a,0 12px 30px #0008;border-radius:2px}
+.app-shell.mode-manager .page-heading h1,.app-shell.mode-player .page-heading h1{text-transform:uppercase;letter-spacing:1.5px;text-shadow:0 2px 8px #000b}
+.app-shell.mode-manager .manager-hero,.app-shell.mode-player .manager-hero{min-height:270px;border-radius:2px;border:1px solid #7d8a9a;background:linear-gradient(105deg,#101b29 0%,#1a2d42 54%,#34475b 100%);box-shadow:inset 0 1px #ffffff25,0 18px 38px #0009}
+.app-shell.mode-manager .manager-hero:after,.app-shell.mode-player .manager-hero:after{content:"MASTER LEAGUE  •  CASCARITA";position:absolute;right:24px;bottom:18px;color:#d8c18a;font-size:9px;font-weight:900;letter-spacing:2px;opacity:.8}
+.app-shell.mode-manager .manager-ball,.app-shell.mode-player .manager-ball{font-size:96px;color:#d6b96f;text-shadow:0 5px 25px #000b}
+.app-shell.mode-manager .panel,.app-shell.mode-player .panel,.app-shell.mode-manager .stat,.app-shell.mode-player .stat,.app-shell.mode-manager .league-card,.app-shell.mode-player .league-card{border-radius:2px;border:1px solid #3c5066;background:linear-gradient(145deg,#19283a,#0e1724);box-shadow:inset 0 1px #ffffff0c,0 8px 20px #0005}
+.app-shell.mode-manager .panel-head,.app-shell.mode-player .panel-head{border-bottom:1px solid #3b4c60;padding-bottom:12px}
+.app-shell.mode-manager .panel-head h3,.app-shell.mode-player .panel-head h3{letter-spacing:1px;font-size:14px}
+.app-shell.mode-manager .stat small,.app-shell.mode-player .stat small{color:#b9c5d3;text-transform:uppercase;letter-spacing:1px;font-weight:800}
+.app-shell.mode-manager .stat strong,.app-shell.mode-player .stat strong{font-size:28px;color:#f0d38b;text-shadow:0 2px 8px #0008}
+.app-shell.mode-manager .manager-team,.app-shell.mode-player .history-row{border-color:#35475b}
+.app-shell.mode-manager .manager-team h3,.app-shell.mode-player .league-card h3{color:#f4f6fa}
+.app-shell.mode-manager .btn-primary,.app-shell.mode-player .btn-primary{border:1px solid #f0d78e;background:linear-gradient(#ead28e,#a9823e);box-shadow:inset 0 1px #fff8,0 3px 10px #0008;text-shadow:none;font-weight:900}
+.app-shell.mode-manager .btn-secondary,.app-shell.mode-player .btn-secondary{border:1px solid #657990;background:linear-gradient(#344b64,#17283b);box-shadow:inset 0 1px #ffffff20;color:#f3f6fa}
+.app-shell.mode-player .manager-hero{background:linear-gradient(105deg,#0c1b2d,#174263 58%,#236889)}
+.app-shell.mode-player .manager-hero:after{content:"BECOME A LEGEND  •  CASCARITA"}
+.app-shell.mode-player .stat strong{color:#83c9ee}
+.app-shell.mode-player .btn-primary{background:linear-gradient(#a9ddf3,#398ab5);border-color:#bdeaff;color:#071725}
+.mode-switch{border-radius:2px!important;border-color:#65768b!important;background:linear-gradient(#1d2d40,#101a28)!important}
+.mode-label{font-size:10px!important;letter-spacing:1.5px!important;color:#f0d38b!important}
+.auth-card select[name=initialRole]{border:1px solid #8c9baa;background:#101d2b;color:#f4f7fa;padding:13px;border-radius:5px;width:100%;font-weight:700}
+.auth-card label small{display:block;color:#8796a8;font-size:11px;line-height:1.5;margin-top:7px}
+@media(max-width:760px){.app-shell.mode-manager .manager-hero,.app-shell.mode-player .manager-hero{min-height:205px;padding:24px 20px}.app-shell.mode-manager .manager-ball,.app-shell.mode-player .manager-ball{font-size:58px}.app-shell.mode-manager .manager-hero:after,.app-shell.mode-player .manager-hero:after{font-size:7px;right:12px;bottom:10px}}
