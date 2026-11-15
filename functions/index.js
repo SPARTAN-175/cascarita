@@ -15,6 +15,22 @@ function requireSuperadmin(request) {
   return request.auth.uid;
 }
 function text(v, max = 120) { return String(v ?? '').trim().slice(0, max); }
+async function requireManager(uid) {
+  const snap = await db.collection('users').doc(uid).get();
+  const roles = snap.exists && Array.isArray(snap.data().roles) ? snap.data().roles : [];
+  if (!roles.some(r => ['Directivo', 'Administrador de club'].includes(r))) {
+    throw new HttpsError('permission-denied', 'Tu cuenta no tiene el rol Directivo o Administrador de club.');
+  }
+}
+function teamFields(d) {
+  const out = {};
+  for (const k of ['name','shortName','city','branch','category','season','sponsorName','secondarySponsor','description','crestURL','crestPath','sponsorLogoURL','sponsorLogoPath']) {
+    if (d[k] !== undefined) out[k] = text(d[k], k.includes('URL') || k.endsWith('Path') ? 700 : 500);
+  }
+  if (!out.name && d.name !== undefined) throw new HttpsError('invalid-argument', 'El nombre del equipo es obligatorio.');
+  return out;
+}
+
 
 // Bootstrap protegido: la cuenta fundadora conserva verificación obligatoria.
 exports.claimFounderSuperadmin = onCall({ region: REGION }, async (request) => {
@@ -29,6 +45,30 @@ exports.claimFounderSuperadmin = onCall({ region: REGION }, async (request) => {
   }
   await auth.setCustomUserClaims(user.uid, { ...(user.customClaims || {}), admin: true, superadmin: true });
   return { ok: true, message: 'Permisos de superadministración asignados.' };
+});
+
+exports.managerCreateTeam = onCall({ region: REGION }, async (request) => {
+  if (!request.auth) throw new HttpsError('unauthenticated', 'Inicia sesión primero.');
+  const uid = request.auth.uid; await requireManager(uid);
+  const d = request.data || {}, fields = teamFields(d);
+  if (!fields.name || !fields.city) throw new HttpsError('invalid-argument', 'Completa el nombre del equipo y el municipio.');
+  const ref = db.collection('teams').doc();
+  await ref.create({ ...fields, managerUid: uid, createdBy: uid, status: 'draft', createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() });
+  await db.collection('adminAudit').add({ action: 'manager_team_created', teamId: ref.id, actorUid: uid, createdAt: FieldValue.serverTimestamp() });
+  return { ok: true, teamId: ref.id };
+});
+
+exports.managerUpdateTeam = onCall({ region: REGION }, async (request) => {
+  if (!request.auth) throw new HttpsError('unauthenticated', 'Inicia sesión primero.');
+  const uid = request.auth.uid; await requireManager(uid);
+  const id = text(request.data?.teamId, 128); if (!id) throw new HttpsError('invalid-argument', 'Falta el equipo.');
+  const ref = db.collection('teams').doc(id), fields = teamFields(request.data || {});
+  await db.runTransaction(async tx => {
+    const snap = await tx.get(ref); if (!snap.exists) throw new HttpsError('not-found', 'Equipo no encontrado.');
+    if (snap.data().managerUid !== uid && snap.data().createdBy !== uid) throw new HttpsError('permission-denied', 'No administras este equipo.');
+    tx.update(ref, { ...fields, updatedAt: FieldValue.serverTimestamp() });
+  });
+  return { ok: true, teamId: id };
 });
 
 exports.adminSaveLeague = onCall({ region: REGION }, async (request) => {
@@ -88,8 +128,19 @@ exports.reviewTeamRequest = onCall({ region: REGION }, async (request) => {
     const l = league.data(); if (!['registration','active'].includes(l.status)) throw new HttpsError('failed-precondition', 'La competición no está recibiendo equipos.');
     const teams = await tx.get(db.collection('teams').where('leagueId','==',leagueRef.id));
     if (teams.size >= Number(l.teamLimit || 16)) throw new HttpsError('resource-exhausted', 'La competición alcanzó su cupo máximo.');
-    const teamRef = db.collection('teams').doc(); teamId = teamRef.id;
-    tx.create(teamRef, { name: text(r.teamName || r.name,100), teamName: text(r.teamName || r.name,100), leagueId: leagueRef.id, leagueName: l.name, clubId: text(r.clubId,128), clubName: text(r.clubName,120), sponsorName: text(r.sponsorName,120), sponsorLogoURL: text(r.sponsorLogoURL,500), crestURL: text(r.crestURL,500), managerUid: text(r.managerUid || r.uid,128), city: text(r.city || l.city,120), branch: text(r.branch || l.branch,60), category: text(r.category || l.category,80), status: 'active', createdBy: text(r.uid,128), createdAt: FieldValue.serverTimestamp(), approvedAt: FieldValue.serverTimestamp() });
+    if (r.teamId) {
+      const teamRef = db.collection('teams').doc(text(r.teamId,128));
+      const team = await tx.get(teamRef);
+      if (!team.exists) throw new HttpsError('not-found', 'El equipo solicitado ya no existe.');
+      const td = team.data();
+      if (td.managerUid !== text(r.managerUid || r.uid,128)) throw new HttpsError('permission-denied', 'El solicitante no administra este equipo.');
+      if (td.leagueId && td.leagueId !== leagueRef.id) throw new HttpsError('failed-precondition', 'Este equipo ya está inscrito en otra competición.');
+      teamId = teamRef.id;
+      tx.update(teamRef, { leagueId: leagueRef.id, leagueName: l.name, status: 'active', approvedAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() });
+    } else {
+      const teamRef = db.collection('teams').doc(); teamId = teamRef.id;
+      tx.create(teamRef, { name: text(r.teamName || r.name,100), teamName: text(r.teamName || r.name,100), leagueId: leagueRef.id, leagueName: l.name, clubId: text(r.clubId,128), clubName: text(r.clubName,120), sponsorName: text(r.sponsorName,120), sponsorLogoURL: text(r.sponsorLogoURL,500), crestURL: text(r.crestURL,500), managerUid: text(r.managerUid || r.uid,128), city: text(r.city || l.city,120), branch: text(r.branch || l.branch,60), category: text(r.category || l.category,80), status: 'active', createdBy: text(r.uid,128), createdAt: FieldValue.serverTimestamp(), approvedAt: FieldValue.serverTimestamp() });
+    }
     tx.update(reqRef, { status, teamId, reviewedAt: FieldValue.serverTimestamp(), reviewedBy: adminUid });
   });
   return { ok: true, teamId, message: status === 'approved' ? 'Equipo aprobado y agregado a la competición.' : 'Solicitud rechazada.' };
