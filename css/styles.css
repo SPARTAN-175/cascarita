@@ -124,8 +124,49 @@
 .pes-glass-panel{background:linear-gradient(145deg,#202630ed,#11161eea);border:1px solid #ffffff35;box-shadow:0 12px 30px #0006;padding:22px;margin-bottom:14px;color:#eef2f7}.pes-glass-panel h3{font-size:17px;margin:0 0 7px}.pes-glass-panel>p,.pes-glass-panel .muted{color:#aeb9c6;font-size:11px;line-height:1.65}.pes-section-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:18px}.pes-section-head p{margin:4px 0 0;color:#9caaba;font-size:10px}.pes-tag{border:1px solid #6d8298;color:#a9d2f7;padding:6px 9px;font-size:8px;letter-spacing:1.1px;font-weight:900}.pes-panel-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}.pes-glass-panel .data-form input,.pes-glass-panel .data-form select,.pes-glass-panel .data-form textarea{background:#0c121a;border-color:#536171;color:#f2f5f8}.pes-glass-panel .data-form label{color:#cbd4df}.pes-list-row{display:flex;justify-content:space-between;align-items:center;gap:15px;padding:13px 0;border-bottom:1px solid #ffffff20;color:#e8edf3;font-size:11px}.pes-list-row>div{display:grid;gap:5px}.pes-list-row small{color:#9eacbc;font-size:9px}.pes-list-row>span{color:#a9cbed;font-size:9px}.pes-player-row{display:grid;grid-template-columns:42px 55px minmax(0,1fr) 90px;align-items:center;gap:12px;padding:10px 12px;border-bottom:1px solid #ffffff18;font-size:10px;color:#e7edf4}.pes-player-row>b{color:#9fc9ef;font-size:14px}.pes-player-row>span{color:#9caaba}.pes-player-row>small{color:#a7b4c3}.pes-table-head{background:#ffffff0d;color:#a8b7c7;font-size:8px;letter-spacing:1px}.pes-tactics-layout{display:grid;grid-template-columns:minmax(240px,340px) 1fr;gap:28px;align-items:center}.pes-pitch{position:relative;width:100%;max-width:330px;aspect-ratio: .68;margin:auto;background:repeating-linear-gradient(0deg,#397a49 0 10%,#438553 10% 20%);border:3px solid #a7c3a7;border-radius:8px;box-shadow:0 8px 22px #0007;overflow:hidden}.pes-pitch:before{content:"";position:absolute;inset:5%;border:1px solid #ffffffa8}.pitch-mid{position:absolute;top:50%;left:5%;right:5%;border-top:1px solid #ffffffa8}.pitch-circle{position:absolute;width:34%;aspect-ratio:1;border:1px solid #ffffffa8;border-radius:50%;top:33%;left:33%}.pitch-box{position:absolute;top:5%;left:25%;width:50%;height:17%;border:1px solid #ffffffa8;border-top:0}.pes-player-dot{position:absolute;transform:translate(-50%,-50%);display:grid;justify-items:center;color:white;text-shadow:0 1px 3px #000}.pes-player-dot b{width:23px;height:23px;border-radius:50%;background:linear-gradient(#f6f6f6,#a9b6c4);border:2px solid #52677d;color:#23313d;display:grid;place-items:center;font-size:9px}.pes-player-dot small{font-size:8px;font-weight:900}.pes-tactics-layout aside h4{color:#fff}.pes-tactics-layout aside .pes-list-row{font-size:10px}.pes-calendar{border:1px solid #ffffff27;background:#111720}.pes-calendar-days,.pes-calendar-grid{display:grid;grid-template-columns:repeat(7,1fr)}.pes-calendar-days b{text-align:center;padding:12px 4px;background:#303944;color:#d8e0e9;font-size:9px}.pes-calendar-day{min-height:76px;border:1px solid #ffffff12;padding:8px;color:#dce4ec;font-size:10px;background:#171d26}.pes-calendar-day:nth-child(odd){background:#1c232d}.pes-calendar-day.has-match{box-shadow:inset 0 0 0 2px #72b6ef;background:#263c50}.pes-calendar-day small{display:block;margin-top:8px;color:#a9d5ff;font-size:8px}.pes-fixture-list{margin-top:15px}.pes-training-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}.pes-training-grid article{background:#ffffff0c;border:1px solid #ffffff22;padding:17px;display:grid;gap:9px}.pes-training-grid b{font-size:11px}.pes-training-grid span{font-size:9px;color:#9fb1c4}.pes-empty-club{text-align:center;min-height:400px;display:flex;flex-direction:column;align-items:center;justify-content:center}.pes-empty-icon{font-size:55px;color:#a7c9e8}.pes-empty-club p{max-width:500px}
 @media(max-width:1000px){.pes-overview-grid{grid-template-columns:1fr}.pes-overview-side{grid-template-columns:repeat(3,1fr)}.pes-panel-grid{grid-template-columns:1fr}}
 @media(max-width:650px){.mode-manager .page{padding:16px 12px}.pes-stadium-overlay{padding:18px;min-height:430px}.pes-stadium-card{min-height:430px}.pes-overview-side{grid-template-columns:1fr}.pes-club-identity>span,.pes-club-identity>img{width:58px;height:58px}.pes-match-line b{font-size:10px}.pes-tactics-layout{grid-template-columns:1fr}.pes-training-grid{grid-template-columns:1fr}.pes-player-row{grid-template-columns:30px 42px minmax(0,1fr) 60px;padding:9px 5px}.pes-calendar-day{min-height:54px;padding:5px}.pes-manager-top{align-items:flex-start;flex-direction:column}}
-/* Rol fijo: el panel de entrada depende del rol autorizado de la cuenta. */
-.role-indicator{display:flex;align-items:center;gap:8px;padding:8px 13px;border:1px solid #66788c;background:linear-gradient(180deg,#263442,#111923);color:#eaf1f8;border-radius:3px;font-size:9px;font-weight:900;letter-spacing:1.2px;box-shadow:inset 0 1px #ffffff35,0 3px 10px #0005}
-.mode-manager .role-indicator{border-color:#8198ae;color:#dcecff}
-.mode-player .role-indicator{border-color:#3c7d9b;color:#c9f0ff}
-.mode-admin .role-indicator{border-color:#b99b54;color:#f6e4b0}
+
+/* CASCARITA Manager — tema claro alineado con el panel de superadministración */
+.app-shell.mode-manager{background:#f4f6f8;color:#202b38;--surface:#ffffff;--surface2:#f1f4f7;--line:#dfe5eb;--text:#202b38;--muted:#6f7d8c;--green:#168c5e;--greenSoft:#e4f4ec;--shadow:0 10px 28px #26384a12;}
+.mode-manager .sidebar{background:#fff!important;border-right:1px solid #e0e6ec!important;box-shadow:4px 0 18px #24364a0a!important;color:#263443!important;}
+.mode-manager .sidebar-brand{border-bottom:1px solid #edf0f3;padding-bottom:22px;}
+.mode-manager .sidebar-brand b{color:#202b38!important;}
+.mode-manager .sidebar-brand small,.mode-manager .side-caption,.mode-manager .nav-caption{color:#8793a0!important;}
+.mode-manager .brand-mark{background:#e3f3eb!important;color:#168c5e!important;border-radius:10px!important;}
+.mode-manager .nav-item{color:#596777!important;border-left:3px solid transparent!important;border-radius:8px!important;text-transform:none!important;font-size:12px!important;letter-spacing:0!important;height:44px!important;background:transparent!important;}
+.mode-manager .nav-item:hover{background:#f2f6f4!important;color:#167b55!important;}
+.mode-manager .nav-item.active{background:#e7f4ed!important;border-left-color:#168c5e!important;color:#13794f!important;box-shadow:none!important;font-weight:800;}
+.mode-manager .main{background:#f4f6f8!important;}
+.mode-manager .topbar{background:#fff!important;border-bottom:1px solid #e1e6eb!important;color:#253342!important;}
+.mode-manager .crumb{color:#718091!important;}
+.mode-manager .page{max-width:1600px;padding:25px 30px 45px;}
+.mode-manager .page-heading{display:none;}
+.mode-manager .footer{color:#84909c;border-color:#e4e9ee;}
+.mode-manager .pes-stadium-card{border:1px solid #dce4e9;box-shadow:0 12px 30px #23364a16;border-radius:14px;}
+.mode-manager .pes-mini-card,.mode-manager .pes-glass-panel,.mode-manager .panel{background:#fff!important;color:#263443!important;border:1px solid #e0e6ec!important;border-radius:13px!important;box-shadow:0 5px 18px #26384a0b!important;}
+.mode-manager .pes-glass-panel h3,.mode-manager .pes-mini-card h3,.mode-manager .panel h3{color:#253342!important;}
+.mode-manager .pes-glass-panel p,.mode-manager .pes-mini-card p{color:#718091!important;}
+.mode-manager .pes-tag,.mode-manager .season{background:#edf6f1!important;color:#16794f!important;border:1px solid #d6eadf!important;border-radius:30px!important;}
+.mode-manager .pes-list-row,.mode-manager .pes-player-row{border-color:#e7ebef!important;color:#344252!important;}
+.mode-manager .pes-list-row small,.mode-manager .pes-player-row small{color:#7c8996!important;}
+.mode-manager .btn-primary,.mode-manager .pes-action{background:#168c5e!important;color:#fff!important;border-radius:8px!important;box-shadow:0 5px 12px #168c5e20!important;text-transform:none!important;letter-spacing:0!important;}
+.mode-manager .btn-secondary{background:#f2f5f7!important;color:#344252!important;border:1px solid #dce3e9!important;border-radius:8px!important;}
+.mode-manager input,.mode-manager select,.mode-manager textarea{background:#fff!important;color:#263443!important;border:1px solid #d8e0e7!important;border-radius:8px!important;}
+.mode-manager .mode-switch{background:#f5f7f9!important;border:1px solid #e1e6eb!important;border-radius:9px!important;}
+.mode-manager .mode-label{color:#168c5e!important;}
+.mode-manager #mode-switch{background:#fff!important;color:#263443!important;border:1px solid #d8e0e7!important;border-radius:7px!important;}
+.manager-subnav{display:flex;gap:7px;align-items:center;overflow-x:auto;padding:12px 30px;background:#fff;border-bottom:1px solid #e2e7ec;position:sticky;top:72px;z-index:9;}
+.manager-subnav-item{white-space:nowrap;border:1px solid transparent;background:transparent;color:#687788;padding:9px 13px;border-radius:8px;font-size:11px;font-weight:700;cursor:pointer;}
+.manager-subnav-item:hover{background:#f3f7f5;color:#168c5e;}
+.manager-subnav-item.active{background:#e8f4ed;border-color:#d6eadf;color:#13794f;}
+.pes-nav-group{display:grid;gap:6px;padding:8px 0;}
+.pes-nav-group .nav-item{font-weight:750!important;}
+.manager-team-layout{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(280px,.7fr);gap:18px;align-items:start;}
+.manager-team-choice{width:100%;display:flex;align-items:center;gap:12px;padding:12px;border:1px solid #e4e9ee;border-radius:10px;background:#fff;text-align:left;margin:8px 0;cursor:pointer;color:#273544;}
+.manager-team-choice.active{border-color:#a9d8bf;background:#f1f8f4;}
+.manager-team-choice>span:nth-child(2){display:grid;gap:4px;flex:1;min-width:0;}
+.manager-team-choice small{color:#7c8996;font-size:10px;}
+.manager-team-choice em{font-style:normal;color:#168c5e;font-size:10px;font-weight:800;}
+.manager-crest{width:44px;height:44px;border-radius:10px;background:#edf5f0;display:grid;place-items:center;overflow:hidden;font-size:22px;color:#168c5e;}
+.manager-crest img{width:100%;height:100%;object-fit:contain;}
+.manager-league-apply{margin-top:18px;}
+@media(max-width:800px){.manager-subnav{top:62px;padding:9px 12px}.manager-team-layout{grid-template-columns:1fr}.mode-manager .page{padding:18px 13px 35px}}
