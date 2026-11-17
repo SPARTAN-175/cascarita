@@ -1,0 +1,179 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function owner(uid) {
+      return signedIn() && request.auth.uid == uid;
+    }
+
+    function admin() {
+      return signedIn()
+        && (request.auth.token.admin == true
+          || request.auth.token.superadmin == true);
+    }
+
+    // Compatibilidad con equipos antiguos: algunas aprobaciones guardaban createdBy
+    // pero no managerUid. Se aceptan también los campos históricos ownerUid/managerId.
+    function managesTeamData(data) {
+      return signedIn()
+        && (
+          data.get('managerUid', '') == request.auth.uid
+          || data.get('createdBy', '') == request.auth.uid
+          || data.get('ownerUid', '') == request.auth.uid
+          || data.get('managerId', '') == request.auth.uid
+        );
+    }
+
+    function managesTeam(teamId) {
+      return signedIn()
+        && exists(/databases/$(database)/documents/teams/$(teamId))
+        && managesTeamData(get(/databases/$(database)/documents/teams/$(teamId)).data);
+    }
+
+    function validOwnRequest() {
+      return signedIn()
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.status == 'pending';
+    }
+
+    match /users/{uid} {
+      allow create: if owner(uid)
+        && request.resource.data.email == request.auth.token.email
+        && request.resource.data.roles is list;
+
+      allow read: if owner(uid) || admin();
+
+      allow update: if admin()
+        || (owner(uid)
+          && request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly([
+              'displayName', 'phone', 'city', 'bio',
+              'photoURL', 'photoPath', 'updatedAt'
+            ]));
+
+      allow delete: if false;
+    }
+
+    match /leagues/{leagueId} {
+      allow read: if admin()
+        || resource.data.status in ['active', 'registration'];
+      allow create, update, delete: if admin();
+    }
+
+    match /teams/{teamId} {
+      allow read: if admin()
+        || resource.data.get('status', '') in ['active', 'approved']
+        || managesTeamData(resource.data);
+
+      // Los managers solicitan el alta; la creación oficial ocurre al aprobarla
+      // desde una Cloud Function con Admin SDK.
+      allow create: if admin();
+
+      allow update: if admin()
+        || (managesTeamData(resource.data)
+          && request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly([
+              'name', 'teamName', 'shortName', 'city', 'season',
+              'branch', 'category', 'clubName', 'primaryColor',
+              'sponsors', 'logoURL', 'logoPath', 'updatedAt'
+            ])
+          && request.resource.data.get('managerUid', '') == resource.data.get('managerUid', '')
+          && request.resource.data.get('createdBy', '') == resource.data.get('createdBy', ''));
+
+      allow delete: if admin()
+        || (managesTeamData(resource.data)
+          && resource.data.get('status', '') == 'draft');
+
+      match /roster/{playerUid} {
+        allow read: if admin() || managesTeam(teamId) || owner(playerUid);
+        allow create, update, delete: if admin() || managesTeam(teamId);
+      }
+    }
+
+    match /players/{playerId} {
+      allow read: if admin()
+        || resource.data.get('visibility', '') == 'public'
+        || owner(playerId)
+        || (resource.data.get('teamId', '') != ''
+          && managesTeam(resource.data.teamId));
+
+      allow create, update: if admin() || owner(playerId);
+      allow delete: if admin();
+    }
+
+    match /roleRequests/{requestId} {
+      allow create: if signedIn()
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.status == 'pending'
+        && request.resource.data.role is string
+        && request.resource.data.role != 'Superadministrador';
+
+      allow read: if admin() || (signedIn() && resource.data.uid == request.auth.uid);
+      allow update, delete: if admin();
+    }
+
+    match /teamRequests/{requestId} {
+      allow create: if validOwnRequest()
+        && request.resource.data.teamName is string
+        && request.resource.data.leagueId is string;
+
+      allow read: if admin() || (signedIn() && resource.data.uid == request.auth.uid);
+      allow update, delete: if admin();
+    }
+
+    match /clubRequests/{requestId} {
+      allow create: if validOwnRequest();
+      allow read: if admin() || (signedIn() && resource.data.uid == request.auth.uid);
+      allow update, delete: if admin();
+    }
+
+    match /organizationRequests/{requestId} {
+      allow create: if validOwnRequest();
+      allow read: if admin() || (signedIn() && resource.data.uid == request.auth.uid);
+      allow update, delete: if admin();
+    }
+
+    match /transferRequests/{requestId} {
+      allow create: if signedIn()
+        && request.resource.data.playerUid == request.auth.uid
+        && request.resource.data.status == 'pending';
+
+      allow read: if admin()
+        || (signedIn()
+          && (resource.data.playerUid == request.auth.uid
+            || resource.data.managerUid == request.auth.uid));
+
+      // La aprobación/rechazo se realiza mediante reviewTransferRequest.
+      allow update, delete: if admin();
+    }
+
+    match /news/{newsId} {
+      allow read: if admin() || resource.data.published == true;
+      allow create, update, delete: if admin();
+    }
+
+    match /matches/{matchId} {
+      allow read: if true;
+      allow create, update, delete: if admin();
+    }
+
+    match /testImportBatches/{batchId} {
+      allow read: if admin();
+      allow create, update, delete: if false;
+    }
+
+    match /adminAudit/{auditId} {
+      allow read: if admin();
+      allow create, update, delete: if false;
+    }
+
+    // Denegación por defecto para cualquier colección no declarada.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
