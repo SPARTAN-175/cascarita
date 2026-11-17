@@ -89,7 +89,7 @@ exports.reviewTeamRequest = onCall({ region: REGION }, async (request) => {
     const teams = await tx.get(db.collection('teams').where('leagueId','==',leagueRef.id));
     if (teams.size >= Number(l.teamLimit || 16)) throw new HttpsError('resource-exhausted', 'La competición alcanzó su cupo máximo.');
     const teamRef = db.collection('teams').doc(); teamId = teamRef.id;
-    tx.create(teamRef, { name: text(r.teamName || r.name,100), teamName: text(r.teamName || r.name,100), leagueId: leagueRef.id, leagueName: l.name, clubId: text(r.clubId,128), clubName: text(r.clubName,120), city: text(r.city || l.city,120), branch: text(r.branch || l.branch,60), category: text(r.category || l.category,80), status: 'active', createdBy: text(r.uid,128), createdAt: FieldValue.serverTimestamp(), approvedAt: FieldValue.serverTimestamp() });
+    tx.create(teamRef, { name: text(r.teamName || r.name,100), teamName: text(r.teamName || r.name,100), leagueId: leagueRef.id, leagueName: l.name, clubId: text(r.clubId,128), clubName: text(r.clubName,120), city: text(r.city || l.city,120), branch: text(r.branch || l.branch,60), category: text(r.category || l.category,80), status: 'active', managerUid: text(r.uid,128), createdBy: text(r.uid,128), createdAt: FieldValue.serverTimestamp(), approvedAt: FieldValue.serverTimestamp() });
     tx.update(reqRef, { status, teamId, reviewedAt: FieldValue.serverTimestamp(), reviewedBy: adminUid });
   });
   return { ok: true, teamId, message: status === 'approved' ? 'Equipo aprobado y agregado a la competición.' : 'Solicitud rechazada.' };
@@ -200,7 +200,83 @@ function makeRoundRobin(teamList, legs=2) {
   }
   return legs===2?[...first,...first.map(m=>({round:m.round+rounds,home:m.away,away:m.home}))]:first;
 }
-exports.importTestLeague = onCall({ region: REGION, timeoutSeconds: 540, memory: '1GiB' }, async (request) => {
+
+function assertTeamManager(uid, team) {
+  if (!team || ![team.managerUid, team.createdBy, team.ownerUid, team.managerId].includes(uid)) {
+    throw new HttpsError('permission-denied', 'No tienes autorización para administrar este equipo.');
+  }
+}
+
+
+exports.managerAddPlayerByEmail = onCall({ region: REGION, cors: ['https://spartan-175.github.io'] }, async (request) => {
+  if (!request.auth) throw new HttpsError('unauthenticated', 'Inicia sesión primero.');
+  const uid=request.auth.uid, teamId=text(request.data?.teamId,128), email=text(request.data?.email,160).toLowerCase();
+  if(!teamId||!email) throw new HttpsError('invalid-argument','Indica el equipo y el correo del jugador.');
+  const teamSnap=await db.collection('teams').doc(teamId).get();
+  if(!teamSnap.exists) throw new HttpsError('not-found','El equipo no existe.');
+  assertTeamManager(uid,teamSnap.data());
+  let authUser;
+  try{authUser=await auth.getUserByEmail(email)}catch(e){throw new HttpsError('not-found','No encontramos una cuenta con ese correo. El jugador debe registrarse primero.');}
+  const userSnap=await db.collection('users').doc(authUser.uid).get();
+  if(!userSnap.exists) throw new HttpsError('failed-precondition','La cuenta del jugador aún no tiene perfil CASCARITA.');
+  const user=userSnap.data(), position=text(request.data?.position,60), number=Number(request.data?.number||0);
+  if(!Number.isInteger(number)||number<0||number>99) throw new HttpsError('invalid-argument','Dorsal inválido.');
+  const rosterRef=db.collection('teams').doc(teamId).collection('roster').doc(authUser.uid);
+  await db.runTransaction(async tx=>{
+    const existing=await tx.get(rosterRef);
+    if(existing.exists) throw new HttpsError('already-exists','Este jugador ya está en la plantilla.');
+    tx.set(rosterRef,{uid:authUser.uid,email:text(user.email||authUser.email,160),displayName:text(user.displayName||authUser.displayName,100),position,number,status:'active',joinedAt:FieldValue.serverTimestamp()});
+    tx.set(db.collection('players').doc(authUser.uid),{uid:authUser.uid,displayName:text(user.displayName||authUser.displayName,100),position,teamId,teamName:text(teamSnap.data().name||teamSnap.data().teamName,100),visibility:'public',updatedAt:FieldValue.serverTimestamp()},{merge:true});
+  });
+  return {ok:true,message:'Jugador agregado a la plantilla.'};
+});
+
+exports.managerAddPlayer = onCall({ region: REGION, cors: ['https://spartan-175.github.io'] }, async (request) => {
+  if (!request.auth) throw new HttpsError('unauthenticated', 'Inicia sesión primero.');
+  const uid=request.auth.uid, teamId=text(request.data?.teamId,128), playerUid=text(request.data?.playerUid,128);
+  if(!teamId||!playerUid) throw new HttpsError('invalid-argument','Falta el equipo o el jugador.');
+  const teamRef=db.collection('teams').doc(teamId), userRef=db.collection('users').doc(playerUid);
+  const [teamSnap,userSnap]=await Promise.all([teamRef.get(),userRef.get()]);
+  if(!teamSnap.exists) throw new HttpsError('not-found','El equipo no existe.');
+  assertTeamManager(uid,teamSnap.data());
+  if(!userSnap.exists) throw new HttpsError('not-found','El jugador debe tener una cuenta registrada.');
+  const user=userSnap.data(), position=text(request.data?.position,60), number=Number(request.data?.number||0);
+  if(!Number.isInteger(number)||number<0||number>99) throw new HttpsError('invalid-argument','Dorsal inválido.');
+  const rosterRef=teamRef.collection('roster').doc(playerUid);
+  await db.runTransaction(async tx=>{
+    const existing=await tx.get(rosterRef);
+    if(existing.exists) throw new HttpsError('already-exists','Este jugador ya está en la plantilla.');
+    tx.set(rosterRef,{uid:playerUid,email:text(user.email,160),displayName:text(user.displayName,100),position,number,status:'active',joinedAt:FieldValue.serverTimestamp()});
+    tx.set(db.collection('players').doc(playerUid),{uid:playerUid,displayName:text(user.displayName,100),position,teamId,teamName:text(teamSnap.data().name||teamSnap.data().teamName,100),visibility:'public',updatedAt:FieldValue.serverTimestamp()},{merge:true});
+  });
+  return {ok:true,message:'Jugador agregado a la plantilla.'};
+});
+
+exports.reviewTransferRequest = onCall({ region: REGION, cors: ['https://spartan-175.github.io'] }, async (request) => {
+  if (!request.auth) throw new HttpsError('unauthenticated','Inicia sesión primero.');
+  const uid=request.auth.uid, requestId=text(request.data?.requestId,128), accepted=request.data?.accepted===true;
+  if(!requestId) throw new HttpsError('invalid-argument','Solicitud inválida.');
+  let playerUid='', teamId='';
+  await db.runTransaction(async tx=>{
+    const reqRef=db.collection('transferRequests').doc(requestId), req=await tx.get(reqRef);
+    if(!req.exists) throw new HttpsError('not-found','Solicitud no encontrada.');
+    const r=req.data(); teamId=text(r.teamId,128); playerUid=text(r.playerUid,128);
+    const teamRef=db.collection('teams').doc(teamId), team=await tx.get(teamRef);
+    if(!team.exists) throw new HttpsError('not-found','El equipo ya no existe.');
+    assertTeamManager(uid,team.data());
+    if(r.status!=='pending') throw new HttpsError('failed-precondition','La solicitud ya fue revisada.');
+    if(accepted){
+      const userRef=db.collection('users').doc(playerUid), user=await tx.get(userRef);
+      if(!user.exists) throw new HttpsError('not-found','La cuenta del jugador ya no existe.');
+      tx.set(teamRef.collection('roster').doc(playerUid),{uid:playerUid,email:text(user.data().email||r.playerEmail,160),displayName:text(user.data().displayName||r.playerName,100),position:text(r.position,60),status:'active',joinedAt:FieldValue.serverTimestamp()});
+      tx.set(db.collection('players').doc(playerUid),{uid:playerUid,displayName:text(user.data().displayName||r.playerName,100),position:text(r.position,60),teamId,teamName:text(team.data().name||team.data().teamName,100),visibility:'public',updatedAt:FieldValue.serverTimestamp()},{merge:true});
+    }
+    tx.update(reqRef,{status:accepted?'accepted':'rejected',reviewedBy:uid,reviewedAt:FieldValue.serverTimestamp()});
+  });
+  return {ok:true,message:accepted?'Solicitud aceptada y jugador incorporado.':'Solicitud rechazada.'};
+});
+
+exports.importTestLeague = onCall({ region: REGION, cors: ['https://spartan-175.github.io'], timeoutSeconds: 540, memory: '1GiB' }, async (request) => {
   const adminUid=requireSuperadmin(request), leagueId=text(request.data?.leagueId,128), payload=request.data?.payload;
   if(!leagueId||!payload||payload.schema!=='cascarita.test-data'||payload.schemaVersion!==1)throw new HttpsError('invalid-argument','Archivo o competición inválidos.');
   if(payload.safety?.isTestData!==true||payload.safety?.noFirebaseAuthAccounts!==true)throw new HttpsError('invalid-argument','El archivo no está marcado como datos de prueba seguros.');
@@ -222,8 +298,8 @@ exports.importTestLeague = onCall({ region: REGION, timeoutSeconds: 540, memory:
     const teamDocIds=new Map(); teams.forEach(t=>teamDocIds.set(t.id,`${safeDocId(batchId,40)}_${safeDocId(t.id,60)}`));
     const playerDocIds=new Map(); players.forEach(p=>playerDocIds.set(p.id,`${safeDocId(batchId,40)}_${safeDocId(p.id,60)}`));
     const writes=[];
-    for(const t of teams){const id=teamDocIds.get(t.id);writes.push({ref:db.collection('teams').doc(id),data:{...t,id,sourceId:t.id,leagueId,leagueName:league.name,leagueStatus:'approved',status:'active',createdBy:adminUid,isTestData:true,testBatchId:batchId,createdAt:FieldValue.serverTimestamp()}});}
-    for(const p of players){const id=playerDocIds.get(p.id);writes.push({ref:db.collection('players').doc(id),data:{...p,id,sourceId:p.id,teamId:teamDocIds.get(p.teamId),teamName:teams.find(t=>t.id===p.teamId).name,leagueId,visibility:'public',isTestData:true,testBatchId:batchId,createdAt:FieldValue.serverTimestamp()}});}
+    for(const t of teams){const id=teamDocIds.get(t.id), rosterIds=players.filter(p=>p.teamId===t.id).map(p=>playerDocIds.get(p.id));writes.push({ref:db.collection('teams').doc(id),data:{...t,id,sourceId:t.id,roster:rosterIds,leagueId,leagueName:league.name,leagueStatus:'approved',status:'active',managerUid:adminUid,createdBy:adminUid,isTestData:true,testBatchId:batchId,createdAt:FieldValue.serverTimestamp()}});}
+    for(const p of players){const id=playerDocIds.get(p.id), teamId=teamDocIds.get(p.teamId), teamName=teams.find(t=>t.id===p.teamId).name;writes.push({ref:db.collection('players').doc(id),data:{...p,id,sourceId:p.id,teamId,teamName,leagueId,visibility:'public',isTestData:true,testBatchId:batchId,createdAt:FieldValue.serverTimestamp()}});writes.push({ref:db.collection('teams').doc(teamId).collection('roster').doc(id),data:{playerId:id,sourceId:p.id,displayName:text(p.name,100),position:text(p.position,60),number:Number(p.number||p.jerseyNumber||0),status:'active',isTestData:true,testBatchId:batchId,joinedAt:FieldValue.serverTimestamp()}});}
     const fixtureTeams=teams.map(t=>({id:teamDocIds.get(t.id),name:text(t.name,100)}));
     const fixtures=makeRoundRobin(fixtureTeams,Number(payload.competition?.legs)===1?1:2);
     for(let i=0;i<fixtures.length;i++){const m=fixtures[i],id=`${safeDocId(batchId,40)}_MATCH_${String(i+1).padStart(3,'0')}`;writes.push({ref:db.collection('matches').doc(id),data:{leagueId,leagueName:league.name,homeTeam:m.home.name,awayTeam:m.away.name,homeTeamId:m.home.id,awayTeamId:m.away.id,round:m.round,status:'scheduled',kickoff:null,homeGoals:null,awayGoals:null,generated:true,isTestData:true,testBatchId:batchId,createdBy:adminUid,createdAt:FieldValue.serverTimestamp()}});}
@@ -233,13 +309,15 @@ exports.importTestLeague = onCall({ region: REGION, timeoutSeconds: 540, memory:
     return {ok:true,teams:16,players:320,matches:fixtures.length,message:`Importación completada: 16 equipos, 320 jugadores y ${fixtures.length} partidos.`};
   }catch(e){await batchRef.set({status:'failed',error:text(e.message,300),failedAt:FieldValue.serverTimestamp()},{merge:true});throw e instanceof HttpsError?e:new HttpsError('internal',e.message||'Falló la importación. Puedes limpiar el lote parcial desde el laboratorio.');}
 });
-exports.cleanupTestImport = onCall({ region: REGION, timeoutSeconds: 540, memory: '1GiB' }, async (request) => {
+exports.cleanupTestImport = onCall({ region: REGION, cors: ['https://spartan-175.github.io'], timeoutSeconds: 540, memory: '1GiB' }, async (request) => {
   const adminUid=requireSuperadmin(request), batchId=text(request.data?.batchId,100); if(!batchId)throw new HttpsError('invalid-argument','Falta el identificador del lote.');
   const batchRef=db.collection('testImportBatches').doc(safeDocId(batchId)); const meta=await batchRef.get(); if(!meta.exists)throw new HttpsError('not-found','No existe ese lote de pruebas.');
   if(meta.data().isTestData!==true||meta.data().createdBy!==adminUid)throw new HttpsError('permission-denied','Solo puedes limpiar lotes de prueba creados por este superadministrador.');
   await batchRef.set({status:'cleaning',cleanupStartedAt:FieldValue.serverTimestamp()},{merge:true});
   let removed=0;
   try{
+    const rosterSnap=await db.collectionGroup('roster').where('testBatchId','==',batchId).get();
+    for(let i=0;i<rosterSnap.docs.length;i+=400){const b=db.batch();const part=rosterSnap.docs.slice(i,i+400);part.forEach(d=>b.delete(d.ref));await b.commit();removed+=part.length;}
     for(const col of ['matches','players','teams']){
       while(true){const snap=await db.collection(col).where('testBatchId','==',batchId).limit(400).get();if(snap.empty)break;const b=db.batch();snap.docs.forEach(d=>b.delete(d.ref));await b.commit();removed+=snap.size;}
     }
