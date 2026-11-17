@@ -15,22 +15,6 @@ function requireSuperadmin(request) {
   return request.auth.uid;
 }
 function text(v, max = 120) { return String(v ?? '').trim().slice(0, max); }
-async function requireManager(uid) {
-  const snap = await db.collection('users').doc(uid).get();
-  const roles = snap.exists && Array.isArray(snap.data().roles) ? snap.data().roles : [];
-  if (!roles.some(r => ['Directivo', 'Administrador de club'].includes(r))) {
-    throw new HttpsError('permission-denied', 'Tu cuenta no tiene el rol Directivo o Administrador de club.');
-  }
-}
-function teamFields(d) {
-  const out = {};
-  for (const k of ['name','shortName','city','branch','category','season','sponsorName','secondarySponsor','description','crestURL','crestPath','sponsorLogoURL','sponsorLogoPath']) {
-    if (d[k] !== undefined) out[k] = text(d[k], k.includes('URL') || k.endsWith('Path') ? 700 : 500);
-  }
-  if (!out.name && d.name !== undefined) throw new HttpsError('invalid-argument', 'El nombre del equipo es obligatorio.');
-  return out;
-}
-
 
 // Bootstrap protegido: la cuenta fundadora conserva verificación obligatoria.
 exports.claimFounderSuperadmin = onCall({ region: REGION }, async (request) => {
@@ -45,30 +29,6 @@ exports.claimFounderSuperadmin = onCall({ region: REGION }, async (request) => {
   }
   await auth.setCustomUserClaims(user.uid, { ...(user.customClaims || {}), admin: true, superadmin: true });
   return { ok: true, message: 'Permisos de superadministración asignados.' };
-});
-
-exports.managerCreateTeam = onCall({ region: REGION }, async (request) => {
-  if (!request.auth) throw new HttpsError('unauthenticated', 'Inicia sesión primero.');
-  const uid = request.auth.uid; await requireManager(uid);
-  const d = request.data || {}, fields = teamFields(d);
-  if (!fields.name || !fields.city) throw new HttpsError('invalid-argument', 'Completa el nombre del equipo y el municipio.');
-  const ref = db.collection('teams').doc();
-  await ref.create({ ...fields, managerUid: uid, createdBy: uid, status: 'draft', createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() });
-  await db.collection('adminAudit').add({ action: 'manager_team_created', teamId: ref.id, actorUid: uid, createdAt: FieldValue.serverTimestamp() });
-  return { ok: true, teamId: ref.id };
-});
-
-exports.managerUpdateTeam = onCall({ region: REGION }, async (request) => {
-  if (!request.auth) throw new HttpsError('unauthenticated', 'Inicia sesión primero.');
-  const uid = request.auth.uid; await requireManager(uid);
-  const id = text(request.data?.teamId, 128); if (!id) throw new HttpsError('invalid-argument', 'Falta el equipo.');
-  const ref = db.collection('teams').doc(id), fields = teamFields(request.data || {});
-  await db.runTransaction(async tx => {
-    const snap = await tx.get(ref); if (!snap.exists) throw new HttpsError('not-found', 'Equipo no encontrado.');
-    if (snap.data().managerUid !== uid && snap.data().createdBy !== uid) throw new HttpsError('permission-denied', 'No administras este equipo.');
-    tx.update(ref, { ...fields, updatedAt: FieldValue.serverTimestamp() });
-  });
-  return { ok: true, teamId: id };
 });
 
 exports.adminSaveLeague = onCall({ region: REGION }, async (request) => {
@@ -128,19 +88,8 @@ exports.reviewTeamRequest = onCall({ region: REGION }, async (request) => {
     const l = league.data(); if (!['registration','active'].includes(l.status)) throw new HttpsError('failed-precondition', 'La competición no está recibiendo equipos.');
     const teams = await tx.get(db.collection('teams').where('leagueId','==',leagueRef.id));
     if (teams.size >= Number(l.teamLimit || 16)) throw new HttpsError('resource-exhausted', 'La competición alcanzó su cupo máximo.');
-    if (r.teamId) {
-      const teamRef = db.collection('teams').doc(text(r.teamId,128));
-      const team = await tx.get(teamRef);
-      if (!team.exists) throw new HttpsError('not-found', 'El equipo solicitado ya no existe.');
-      const td = team.data();
-      if (td.managerUid !== text(r.managerUid || r.uid,128)) throw new HttpsError('permission-denied', 'El solicitante no administra este equipo.');
-      if (td.leagueId && td.leagueId !== leagueRef.id) throw new HttpsError('failed-precondition', 'Este equipo ya está inscrito en otra competición.');
-      teamId = teamRef.id;
-      tx.update(teamRef, { leagueId: leagueRef.id, leagueName: l.name, status: 'active', approvedAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() });
-    } else {
-      const teamRef = db.collection('teams').doc(); teamId = teamRef.id;
-      tx.create(teamRef, { name: text(r.teamName || r.name,100), teamName: text(r.teamName || r.name,100), leagueId: leagueRef.id, leagueName: l.name, clubId: text(r.clubId,128), clubName: text(r.clubName,120), sponsorName: text(r.sponsorName,120), sponsorLogoURL: text(r.sponsorLogoURL,500), crestURL: text(r.crestURL,500), managerUid: text(r.managerUid || r.uid,128), city: text(r.city || l.city,120), branch: text(r.branch || l.branch,60), category: text(r.category || l.category,80), status: 'active', createdBy: text(r.uid,128), createdAt: FieldValue.serverTimestamp(), approvedAt: FieldValue.serverTimestamp() });
-    }
+    const teamRef = db.collection('teams').doc(); teamId = teamRef.id;
+    tx.create(teamRef, { name: text(r.teamName || r.name,100), teamName: text(r.teamName || r.name,100), leagueId: leagueRef.id, leagueName: l.name, clubId: text(r.clubId,128), clubName: text(r.clubName,120), city: text(r.city || l.city,120), branch: text(r.branch || l.branch,60), category: text(r.category || l.category,80), status: 'active', createdBy: text(r.uid,128), createdAt: FieldValue.serverTimestamp(), approvedAt: FieldValue.serverTimestamp() });
     tx.update(reqRef, { status, teamId, reviewedAt: FieldValue.serverTimestamp(), reviewedBy: adminUid });
   });
   return { ok: true, teamId, message: status === 'approved' ? 'Equipo aprobado y agregado a la competición.' : 'Solicitud rechazada.' };
@@ -236,4 +185,66 @@ exports.generateLeagueFixtures = onCall({ region: REGION, timeoutSeconds: 540 },
     await leagueRef.set({fixturesGenerationStatus:'failed',fixturesGenerationError:text(e.message,300)}, {merge:true});
     throw e instanceof HttpsError ? e : new HttpsError('internal',e.message || 'No se pudo generar el calendario.');
   }
+});
+
+
+// Importación masiva y limpieza selectiva del laboratorio de pruebas CASCARITA.
+// No crea cuentas de Firebase Authentication ni elimina usuarios/competiciones.
+function safeDocId(value, max=100) { return String(value ?? '').replace(/[^a-zA-Z0-9_-]/g,'-').slice(0,max); }
+function makeRoundRobin(teamList, legs=2) {
+  const arr0=[...teamList]; if(arr0.length%2)arr0.push(null);
+  const n=arr0.length, rounds=n-1, half=n/2, first=[]; let arr=arr0.slice();
+  for(let round=0;round<rounds;round++){
+    for(let i=0;i<half;i++){const a=arr[i],b=arr[n-1-i];if(!a||!b)continue;const flip=(round+i)%2===1;first.push({round:round+1,home:flip?b:a,away:flip?a:b});}
+    arr=[arr[0],arr[n-1],...arr.slice(1,n-1)];
+  }
+  return legs===2?[...first,...first.map(m=>({round:m.round+rounds,home:m.away,away:m.home}))]:first;
+}
+exports.importTestLeague = onCall({ region: REGION, timeoutSeconds: 540, memory: '1GiB' }, async (request) => {
+  const adminUid=requireSuperadmin(request), leagueId=text(request.data?.leagueId,128), payload=request.data?.payload;
+  if(!leagueId||!payload||payload.schema!=='cascarita.test-data'||payload.schemaVersion!==1)throw new HttpsError('invalid-argument','Archivo o competición inválidos.');
+  if(payload.safety?.isTestData!==true||payload.safety?.noFirebaseAuthAccounts!==true)throw new HttpsError('invalid-argument','El archivo no está marcado como datos de prueba seguros.');
+  const teams=payload.teams, players=payload.players, batchId=text(payload.batchId,100);
+  if(!batchId||!Array.isArray(teams)||teams.length!==16||!Array.isArray(players)||players.length!==320)throw new HttpsError('invalid-argument','El archivo debe contener exactamente 16 equipos y 320 jugadores.');
+  const leagueRef=db.collection('leagues').doc(leagueId), batchRef=db.collection('testImportBatches').doc(safeDocId(batchId));
+  const leagueSnap=await leagueRef.get(); if(!leagueSnap.exists)throw new HttpsError('not-found','La competición seleccionada no existe.');
+  const league=leagueSnap.data(); if(!['draft','registration','active'].includes(league.status))throw new HttpsError('failed-precondition','La competición debe estar en preparación, inscripción o activa.');
+  if(teams.length>Number(league.teamLimit||16))throw new HttpsError('resource-exhausted','El cupo de la competición es menor que los 16 equipos del archivo.');
+  if(String(league.branch||'').toLowerCase()!==String(payload.competition.branch||'').toLowerCase())throw new HttpsError('failed-precondition','La rama del archivo no coincide con la competición.');
+  const existingBatch=await batchRef.get(); if(existingBatch.exists)throw new HttpsError('already-exists','Este lote ya fue importado. Primero limpia el lote anterior.');
+  const currentTeams=await db.collection('teams').where('leagueId','==',leagueId).limit(1).get(); if(!currentTeams.empty)throw new HttpsError('failed-precondition','La competición ya tiene equipos. Para evitar mezclar datos, importa en una competición vacía.');
+  const teamIds=new Set(teams.map(t=>String(t.id))); if(teamIds.size!==16)throw new HttpsError('invalid-argument','Hay identificadores de equipo duplicados.');
+  const playerIds=new Set(players.map(p=>String(p.id))); if(playerIds.size!==320)throw new HttpsError('invalid-argument','Hay identificadores de jugador duplicados.');
+  const playerCounts=new Map(); for(const p of players){if(!teamIds.has(String(p.teamId)))throw new HttpsError('invalid-argument','Hay jugadores asociados a un equipo inexistente.');playerCounts.set(p.teamId,(playerCounts.get(p.teamId)||0)+1);if(!p.name||!p.position)throw new HttpsError('invalid-argument','Cada jugador debe tener nombre y posición.');}
+  if(teams.some(t=>playerCounts.get(t.id)!==20))throw new HttpsError('invalid-argument','Cada equipo debe tener exactamente 20 jugadores.');
+  await db.runTransaction(async tx=>{const b=await tx.get(batchRef);if(b.exists)throw new HttpsError('already-exists','El lote ya existe.');tx.create(batchRef,{batchId,leagueId,leagueName:text(league.name,120),status:'importing',teamCount:16,playerCount:320,createdBy:adminUid,createdAt:FieldValue.serverTimestamp(),isTestData:true});});
+  try{
+    const teamDocIds=new Map(); teams.forEach(t=>teamDocIds.set(t.id,`${safeDocId(batchId,40)}_${safeDocId(t.id,60)}`));
+    const playerDocIds=new Map(); players.forEach(p=>playerDocIds.set(p.id,`${safeDocId(batchId,40)}_${safeDocId(p.id,60)}`));
+    const writes=[];
+    for(const t of teams){const id=teamDocIds.get(t.id);writes.push({ref:db.collection('teams').doc(id),data:{...t,id,sourceId:t.id,leagueId,leagueName:league.name,leagueStatus:'approved',status:'active',createdBy:adminUid,isTestData:true,testBatchId:batchId,createdAt:FieldValue.serverTimestamp()}});}
+    for(const p of players){const id=playerDocIds.get(p.id);writes.push({ref:db.collection('players').doc(id),data:{...p,id,sourceId:p.id,teamId:teamDocIds.get(p.teamId),teamName:teams.find(t=>t.id===p.teamId).name,leagueId,visibility:'public',isTestData:true,testBatchId:batchId,createdAt:FieldValue.serverTimestamp()}});}
+    const fixtureTeams=teams.map(t=>({id:teamDocIds.get(t.id),name:text(t.name,100)}));
+    const fixtures=makeRoundRobin(fixtureTeams,Number(payload.competition?.legs)===1?1:2);
+    for(let i=0;i<fixtures.length;i++){const m=fixtures[i],id=`${safeDocId(batchId,40)}_MATCH_${String(i+1).padStart(3,'0')}`;writes.push({ref:db.collection('matches').doc(id),data:{leagueId,leagueName:league.name,homeTeam:m.home.name,awayTeam:m.away.name,homeTeamId:m.home.id,awayTeamId:m.away.id,round:m.round,status:'scheduled',kickoff:null,homeGoals:null,awayGoals:null,generated:true,isTestData:true,testBatchId:batchId,createdBy:adminUid,createdAt:FieldValue.serverTimestamp()}});}
+    for(let i=0;i<writes.length;i+=400){const batch=db.batch();for(const w of writes.slice(i,i+400))batch.create(w.ref,w.data);await batch.commit();}
+    await batchRef.update({status:'complete',fixtureCount:fixtures.length,roundCount:Math.max(...fixtures.map(x=>x.round)),completedAt:FieldValue.serverTimestamp()});
+    await leagueRef.set({testDataImported:true,testDataBatchId:batchId},{merge:true});
+    return {ok:true,teams:16,players:320,matches:fixtures.length,message:`Importación completada: 16 equipos, 320 jugadores y ${fixtures.length} partidos.`};
+  }catch(e){await batchRef.set({status:'failed',error:text(e.message,300),failedAt:FieldValue.serverTimestamp()},{merge:true});throw e instanceof HttpsError?e:new HttpsError('internal',e.message||'Falló la importación. Puedes limpiar el lote parcial desde el laboratorio.');}
+});
+exports.cleanupTestImport = onCall({ region: REGION, timeoutSeconds: 540, memory: '1GiB' }, async (request) => {
+  const adminUid=requireSuperadmin(request), batchId=text(request.data?.batchId,100); if(!batchId)throw new HttpsError('invalid-argument','Falta el identificador del lote.');
+  const batchRef=db.collection('testImportBatches').doc(safeDocId(batchId)); const meta=await batchRef.get(); if(!meta.exists)throw new HttpsError('not-found','No existe ese lote de pruebas.');
+  if(meta.data().isTestData!==true||meta.data().createdBy!==adminUid)throw new HttpsError('permission-denied','Solo puedes limpiar lotes de prueba creados por este superadministrador.');
+  await batchRef.set({status:'cleaning',cleanupStartedAt:FieldValue.serverTimestamp()},{merge:true});
+  let removed=0;
+  try{
+    for(const col of ['matches','players','teams']){
+      while(true){const snap=await db.collection(col).where('testBatchId','==',batchId).limit(400).get();if(snap.empty)break;const b=db.batch();snap.docs.forEach(d=>b.delete(d.ref));await b.commit();removed+=snap.size;}
+    }
+    await batchRef.delete();
+    const leagueId=meta.data().leagueId;if(leagueId)await db.collection('leagues').doc(leagueId).set({testDataImported:false,testDataBatchId:FieldValue.delete()},{merge:true});
+    return {ok:true,removed,message:`Lote limpiado. Se eliminaron ${removed} documentos de prueba; usuarios y competición permanecen intactos.`};
+  }catch(e){await batchRef.set({status:'cleanup_failed',cleanupError:text(e.message,300)},{merge:true});throw new HttpsError('internal',e.message||'No se pudo completar la limpieza.');}
 });
