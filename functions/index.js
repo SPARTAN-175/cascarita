@@ -217,8 +217,25 @@ exports.generateLeagueFixtures = onCall({ region: REGION, timeoutSeconds: 540 },
     const teams = teamSnap.docs.map(d=>({id:d.id,name:text(d.data().name || d.data().teamName,100)}));
     if (teams.length < 2) throw new HttpsError('failed-precondition','Se necesitan al menos dos equipos aprobados.');
     if (teams.length > Number(lock.teamLimit || 16)) throw new HttpsError('failed-precondition','Hay más equipos que el cupo configurado.');
-    const existing = await db.collection('matches').where('leagueId','==',id).limit(1).get();
-    if (!existing.empty) throw new HttpsError('already-exists','Ya existen partidos; no se regenerará para proteger resultados.');
+    const existing = await db.collection('matches').where('leagueId','==',id).get();
+    if (!existing.empty) {
+      const docs = existing.docs;
+      const legacyTestCalendar = docs.every(d => d.data().isTestData === true && !!d.data().testBatchId && d.data().approvalStatus === 'approved');
+      if (legacyTestCalendar) {
+        const rounds = new Set(docs.map(d => Number(d.data().round)||0));
+        for (let i=0;i<docs.length;i+=400) {
+          const b=db.batch();
+          docs.slice(i,i+400).forEach(d=>{
+            const current=String(d.data().status||'').toLowerCase();
+            if (!['final','completed','finished'].includes(current)) b.update(d.ref,{status:'scheduled',updatedAt:FieldValue.serverTimestamp()});
+          });
+          await b.commit();
+        }
+        await leagueRef.update({ fixturesGenerated:true, fixturesGenerationStatus:'complete', fixturesGeneratedAt:FieldValue.serverTimestamp(), fixturesCount:docs.length, fixturesReusedFromTestImport:true });
+        return { ok:true, count:docs.length, reused:true, message:`Se recuperó el calendario existente del lote aprobado: ${docs.length} encuentros en ${rounds.size} jornadas. No se duplicaron partidos.` };
+      }
+      throw new HttpsError('already-exists','Ya existen partidos; no se regenerará para proteger resultados. Consulta el calendario existente.');
+    }
     const fixtures = roundRobin(teams, Number(lock.legs || 2));
     for (let i=0;i<fixtures.length;i+=400) {
       const batch=db.batch();
@@ -387,13 +404,12 @@ exports.importTestLeague = onCall({ region: REGION, cors: ['https://spartan-175.
     const writes=[];
     for(const t of teams){const id=teamDocIds.get(t.id), rosterIds=players.filter(p=>p.teamId===t.id).map(p=>playerDocIds.get(p.id));writes.push({ref:db.collection('teams').doc(id),data:{...t,id,sourceId:t.id,roster:rosterIds,leagueId,leagueName:league.name,leagueStatus:'pending',status:'pending_approval',approvalStatus:'pending',managerUid:adminUid,createdBy:adminUid,isTestData:true,testBatchId:batchId,createdAt:FieldValue.serverTimestamp()}});}
     for(const p of players){const id=playerDocIds.get(p.id), teamId=teamDocIds.get(p.teamId), teamName=teams.find(t=>t.id===p.teamId).name;writes.push({ref:db.collection('players').doc(id),data:{...p,id,sourceId:p.id,teamId,teamName,leagueId,visibility:'pending',isTestData:true,testBatchId:batchId,createdAt:FieldValue.serverTimestamp()}});writes.push({ref:db.collection('teams').doc(teamId).collection('roster').doc(id),data:{playerId:id,sourceId:p.id,displayName:text(p.name,100),position:text(p.position,60),number:Number(p.number||p.jerseyNumber||0),status:'active',isTestData:true,testBatchId:batchId,joinedAt:FieldValue.serverTimestamp()}});}
-    const fixtureTeams=teams.map(t=>({id:teamDocIds.get(t.id),name:text(t.name,100)}));
-    const fixtures=makeRoundRobin(fixtureTeams,Number(payload.competition?.legs)===1?1:2);
-    for(let i=0;i<fixtures.length;i++){const m=fixtures[i],id=`${safeDocId(batchId,40)}_MATCH_${String(i+1).padStart(3,'0')}`;writes.push({ref:db.collection('matches').doc(id),data:{leagueId,leagueName:league.name,homeTeam:m.home.name,awayTeam:m.away.name,homeTeamId:m.home.id,awayTeamId:m.away.id,round:m.round,status:'pending_approval',approvalStatus:'pending',kickoff:null,homeGoals:null,awayGoals:null,generated:true,isTestData:true,testBatchId:batchId,createdBy:adminUid,createdAt:FieldValue.serverTimestamp()}});}
+    // El calendario NO se crea durante la importación: primero se aprueban los equipos.
+    // Después el superadministrador genera el calendario desde la ficha de la competición.
     for(let i=0;i<writes.length;i+=400){const batch=db.batch();for(const w of writes.slice(i,i+400))batch.create(w.ref,w.data);await batch.commit();}
-    await batchRef.update({status:'awaiting_approval',approvalStatus:'pending',fixtureCount:fixtures.length,roundCount:Math.max(...fixtures.map(x=>x.round)),completedAt:FieldValue.serverTimestamp()});
+    await batchRef.update({status:'awaiting_approval',approvalStatus:'pending',fixtureCount:0,roundCount:0,completedAt:FieldValue.serverTimestamp()});
     await leagueRef.set({testDataImported:true,testDataBatchId:batchId},{merge:true});
-    return {ok:true,teams:16,players:320,matches:fixtures.length,message:`Importación completada: 16 equipos, 320 jugadores y ${fixtures.length} partidos.`};
+    return {ok:true,teams:16,players:320,matches:0,message:'Importación completada: 16 equipos y 320 jugadores quedaron pendientes de aprobación. El calendario se generará después de aprobarlos.'};
   }catch(e){await batchRef.set({status:'failed',error:text(e.message,300),failedAt:FieldValue.serverTimestamp()},{merge:true});throw e instanceof HttpsError?e:new HttpsError('internal',e.message||'Falló la importación. Puedes limpiar el lote parcial desde el laboratorio.');}
 });
 
@@ -458,7 +474,8 @@ exports.adminReviewTestData = onCall({ region: REGION, cors: ['https://spartan-1
     matchSnap.docs.slice(i, i + 400).forEach(d => {
       const m = d.data();
       const bothApproved = approvedTeams.has(String(m.homeTeamId)) && approvedTeams.has(String(m.awayTeamId));
-      batch.update(d.ref, { approvalStatus: bothApproved ? 'approved' : 'pending', updatedAt: FieldValue.serverTimestamp() });
+      const nextMatchStatus = bothApproved ? (['final','completed','finished'].includes(String(m.status||'').toLowerCase()) ? m.status : 'scheduled') : 'pending_approval';
+      batch.update(d.ref, { approvalStatus: bothApproved ? 'approved' : 'pending', status: nextMatchStatus, updatedAt: FieldValue.serverTimestamp() });
     });
     await batch.commit();
   }
@@ -534,3 +551,63 @@ exports.adminDeleteTestTeam = onCall({ region: REGION, timeoutSeconds: 540, memo
     message: `Equipo eliminado. Se quitaron ${playerSnap.size} jugadores de prueba, sus encuentros y solicitudes vinculadas. Las cuentas de usuario se conservaron.`
   };
 });
+
+// Eliminación administrativa de un equipo, sea de prueba o registrado manualmente.
+// Conserva perfiles/cuentas reales: los jugadores no ficticios solo se desvinculan.
+exports.adminDeleteTeam = onCall({ region: REGION, timeoutSeconds: 540, memory: '1GiB' }, async (request) => {
+  const adminUid = requireSuperadmin(request);
+  const teamId = text(request.data?.teamId, 128);
+  if (!teamId) throw new HttpsError('invalid-argument', 'Falta el identificador del equipo.');
+  const teamRef = db.collection('teams').doc(teamId);
+  const teamSnap = await teamRef.get();
+  if (!teamSnap.exists) throw new HttpsError('not-found', 'Equipo no encontrado.');
+  const team = teamSnap.data();
+  const [players, homeMatches, awayMatches, teamIdMatches, transfers, requests, usersByTeam, usersByCurrent, usersByManaged] = await Promise.all([
+    db.collection('players').where('teamId', '==', teamId).get(),
+    db.collection('matches').where('homeTeamId', '==', teamId).get(),
+    db.collection('matches').where('awayTeamId', '==', teamId).get(),
+    db.collection('matches').where('teamIds', 'array-contains', teamId).get(),
+    db.collection('transferRequests').where('teamId', '==', teamId).get(),
+    db.collection('teamRequests').where('teamId', '==', teamId).get(),
+    db.collection('users').where('teamId', '==', teamId).get(),
+    db.collection('users').where('currentTeamId', '==', teamId).get(),
+    db.collection('users').where('managedTeamId', '==', teamId).get()
+  ]);
+  const matchMap = new Map([...homeMatches.docs, ...awayMatches.docs, ...teamIdMatches.docs].map(d => [d.ref.path, d]));
+  const testPlayerDocs = [];
+  const realPlayerDocs = [];
+  players.docs.forEach(d => {
+    const p = d.data();
+    if (team.isTestData === true && p.isTestData === true && team.testBatchId && p.testBatchId === team.testBatchId) testPlayerDocs.push(d);
+    else realPlayerDocs.push(d);
+  });
+  // Remove references from real player profiles without deleting their identities or history.
+  for (let i=0;i<realPlayerDocs.length;i+=400) {
+    const b=db.batch();
+    realPlayerDocs.slice(i,i+400).forEach(d=>b.update(d.ref,{teamId:FieldValue.delete(),teamName:FieldValue.delete(),leagueId:FieldValue.delete(),updatedAt:FieldValue.serverTimestamp()}));
+    await b.commit();
+  }
+  const userMap = new Map([...usersByTeam.docs,...usersByCurrent.docs,...usersByManaged.docs].map(d=>[d.ref.path,d]));
+  for (const u of userMap.values()) {
+    const data=u.data(), patch={updatedAt:FieldValue.serverTimestamp()};
+    if(data.teamId===teamId)patch.teamId=FieldValue.delete();
+    if(data.currentTeamId===teamId)patch.currentTeamId=FieldValue.delete();
+    if(data.managedTeamId===teamId)patch.managedTeamId=FieldValue.delete();
+    await u.ref.update(patch);
+  }
+  const deleteDocs = [...matchMap.values(),...transfers.docs,...requests.docs,...testPlayerDocs];
+  const unique = new Map(deleteDocs.map(d=>[d.ref.path,d]));
+  const docs=[...unique.values()];
+  for(let i=0;i<docs.length;i+=400){const b=db.batch();docs.slice(i,i+400).forEach(d=>b.delete(d.ref));await b.commit();}
+  // recursiveDelete also removes teams/{teamId}/roster and any other team subcollections.
+  await db.recursiveDelete(teamRef);
+  await db.collection('adminAudit').add({
+    action:'admin_team_deleted', teamId, teamName:text(team.name||team.teamName,120),
+    wasTestData:team.isTestData===true, deletedTestPlayers:testPlayerDocs.length,
+    preservedAndUnlinkedPlayers:realPlayerDocs.length, deletedMatches:matchMap.size,
+    deletedTransferRequests:transfers.size, deletedTeamRequests:requests.size,
+    actorUid:adminUid, createdAt:FieldValue.serverTimestamp()
+  });
+  return {ok:true,message:`Equipo eliminado. Se quitaron ${matchMap.size} encuentros y sus solicitudes. ${testPlayerDocs.length} jugadores ficticios de prueba fueron retirados; ${realPlayerDocs.length} perfiles de jugadores y todas las cuentas de usuario se conservaron y quedaron desvinculados.`};
+});
+
