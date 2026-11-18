@@ -213,10 +213,42 @@ exports.generateLeagueFixtures = onCall({ region: REGION, timeoutSeconds: 540 },
     return x;
   });
   try {
-    const teamSnap = await db.collection('teams').where('leagueId','==',id).where('status','==','active').get();
-    const teams = teamSnap.docs.map(d=>({id:d.id,name:text(d.data().name || d.data().teamName,100)}));
-    if (teams.length < 2) throw new HttpsError('failed-precondition','Se necesitan al menos dos equipos aprobados.');
-    if (teams.length > Number(lock.teamLimit || 16)) throw new HttpsError('failed-precondition','Hay más equipos que el cupo configurado.');
+    // Reunir equipos vinculados directamente a la liga y equipos de lotes
+    // importados asociados a ella. No exigir status=active en la consulta:
+    // algunas versiones anteriores guardaron approvalStatus='approved' pero
+    // conservaron status='pending_approval'. La aprobación explícita manda.
+    const teamDocs = new Map();
+    const directTeams = await db.collection('teams').where('leagueId','==',id).get();
+    directTeams.docs.forEach(d => teamDocs.set(d.id, d));
+
+    const batchIds = new Set();
+    if (lock.testDataBatchId) batchIds.add(String(lock.testDataBatchId));
+    const batchSnap = await db.collection('testImportBatches').where('leagueId','==',id).get();
+    batchSnap.docs.forEach(d => batchIds.add(String(d.data().batchId || d.id)));
+    for (const batchId of batchIds) {
+      const imported = await db.collection('teams').where('testBatchId','==',batchId).get();
+      imported.docs.forEach(d => teamDocs.set(d.id, d));
+    }
+
+    const approvedDocs = [...teamDocs.values()].filter(d => {
+      const x = d.data();
+      const approval = String(x.approvalStatus || x.leagueStatus || '').toLowerCase();
+      return approval ? approval === 'approved' : String(x.status || '').toLowerCase() === 'active';
+    });
+    const teams = approvedDocs.map(d => ({id:d.id,name:text(d.data().name || d.data().teamName,100)}));
+    if (teams.length < 2) {
+      const linked = teamDocs.size;
+      throw new HttpsError('failed-precondition',`No encuentro suficientes equipos aprobados para esta competición. Equipos vinculados/importados: ${linked}; aprobados detectados: ${teams.length}. Revisa que el lote esté asociado a esta liga y que cada equipo tenga approvalStatus: "approved".`);
+    }
+    if (teams.length > Number(lock.teamLimit || 16)) throw new HttpsError('failed-precondition',`Hay ${teams.length} equipos aprobados, pero el cupo configurado es ${Number(lock.teamLimit || 16)}.`);
+
+    // Normalizar la relación/estado para que el resto del sistema vea los
+    // mismos equipos que utilizó el generador. No toca plantillas ni jugadores.
+    for (let i=0;i<approvedDocs.length;i+=400) {
+      const batch=db.batch();
+      approvedDocs.slice(i,i+400).forEach(d=>batch.update(d.ref,{leagueId:id,leagueName:text(lock.name,120),status:'active',approvalStatus:'approved',leagueStatus:'approved',updatedAt:FieldValue.serverTimestamp()}));
+      await batch.commit();
+    }
     const existing = await db.collection('matches').where('leagueId','==',id).get();
     if (!existing.empty) {
       const docs = existing.docs;
