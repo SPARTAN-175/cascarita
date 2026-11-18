@@ -375,3 +375,48 @@ exports.cleanupTestImport = onCall({ region: REGION, cors: ['https://spartan-175
     return {ok:true,removed,message:`Lote limpiado. Se eliminaron ${removed} documentos de prueba; usuarios y competición permanecen intactos.`};
   }catch(e){await batchRef.set({status:'cleanup_failed',cleanupError:text(e.message,300)},{merge:true});throw new HttpsError('internal',e.message||'No se pudo completar la limpieza.');}
 });
+
+
+exports.adminDeleteTestTeam = onCall({ region: REGION, timeoutSeconds: 540, memory: '1GiB' }, async (request) => {
+  const adminUid = requireSuperadmin(request);
+  const teamId = text(request.data?.teamId, 128);
+  if (!teamId) throw new HttpsError('invalid-argument', 'Falta el identificador del equipo.');
+  const teamRef = db.collection('teams').doc(teamId);
+  const teamSnap = await teamRef.get();
+  if (!teamSnap.exists) throw new HttpsError('not-found', 'Equipo no encontrado.');
+  const team = teamSnap.data();
+  if (team.isTestData !== true || !team.testBatchId) {
+    throw new HttpsError('failed-precondition', 'Por seguridad, la eliminación individual solo está disponible para equipos marcados como datos de prueba.');
+  }
+  const batchId = team.testBatchId;
+  const [playerSnap, matchHome, matchAway, transferSnap] = await Promise.all([
+    db.collection('players').where('teamId', '==', teamId).where('testBatchId', '==', batchId).get(),
+    db.collection('matches').where('homeTeamId', '==', teamId).where('testBatchId', '==', batchId).get(),
+    db.collection('matches').where('awayTeamId', '==', teamId).where('testBatchId', '==', batchId).get(),
+    db.collection('transferRequests').where('teamId', '==', teamId).get()
+  ]);
+  await db.recursiveDelete(teamRef);
+  const docs = [...playerSnap.docs, ...matchHome.docs, ...matchAway.docs, ...transferSnap.docs];
+  const unique = new Map(docs.map(d => [d.ref.path, d]));
+  const list = [...unique.values()];
+  for (let i = 0; i < list.length; i += 450) {
+    const batch = db.batch();
+    list.slice(i, i + 450).forEach(d => batch.delete(d.ref));
+    await batch.commit();
+  }
+  await db.collection('adminAudit').add({
+    action: 'test_team_individually_deleted',
+    teamId,
+    teamName: text(team.name || team.teamName, 120),
+    testBatchId: batchId,
+    deletedTestPlayers: playerSnap.size,
+    deletedMatches: unique.size - transferSnap.size - playerSnap.size,
+    deletedTransferRequests: transferSnap.size,
+    actorUid: adminUid,
+    createdAt: FieldValue.serverTimestamp()
+  });
+  return {
+    ok: true,
+    message: `Equipo eliminado. Se quitaron ${playerSnap.size} jugadores de prueba, sus encuentros y solicitudes vinculadas. Las cuentas de usuario se conservaron.`
+  };
+});
