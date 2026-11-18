@@ -60,18 +60,67 @@ exports.adminSaveLeague = onCall({ region: REGION }, async (request) => {
   return { ok: true, id: ref.id };
 });
 
-exports.adminDeleteLeague = onCall({ region: REGION }, async (request) => {
-  requireSuperadmin(request); const id = text(request.data?.leagueId, 128);
+exports.adminDeleteLeague = onCall({ region: REGION, timeoutSeconds: 540, memory: "1GiB" }, async (request) => {
+  requireSuperadmin(request);
+  const id = text(request.data?.leagueId, 128);
   if (!id) throw new HttpsError('invalid-argument', 'Falta la competición.');
+
   const leagueRef = db.collection('leagues').doc(id);
-  await db.runTransaction(async tx => {
-    const league = await tx.get(leagueRef); if (!league.exists) throw new HttpsError('not-found', 'Competición no encontrada.');
-    const teams = await tx.get(db.collection('teams').where('leagueId', '==', id).limit(1));
-    const matches = await tx.get(db.collection('matches').where('leagueId', '==', id).limit(1));
-    if (!teams.empty || !matches.empty) throw new HttpsError('failed-precondition', 'No se puede eliminar: la competición ya tiene equipos o encuentros. Archívala en su lugar.');
-    tx.delete(leagueRef);
+  const leagueSnap = await leagueRef.get();
+  if (!leagueSnap.exists) throw new HttpsError('not-found', 'Competición no encontrada.');
+
+  // Gather all directly linked records before deleting anything.
+  const [teamSnap, matchSnap, teamRequestSnap] = await Promise.all([
+    db.collection('teams').where('leagueId', '==', id).get(),
+    db.collection('matches').where('leagueId', '==', id).get(),
+    db.collection('teamRequests').where('leagueId', '==', id).get()
+  ]);
+  const teamIds = teamSnap.docs.map(d => d.id);
+
+  // Remove transfer requests tied to the affected teams so no orphaned
+  // negotiation requests remain. Player profiles and user accounts are kept.
+  const transferDocs = [];
+  for (const teamId of teamIds) {
+    const snap = await db.collection('transferRequests').where('teamId', '==', teamId).get();
+    transferDocs.push(...snap.docs);
+  }
+
+  // Delete team documents recursively, including their roster subcollections.
+  for (const teamDoc of teamSnap.docs) {
+    await db.recursiveDelete(teamDoc.ref);
+  }
+
+  // Delete matches, league team requests, and team-linked transfer requests
+  // in safe batches (Firestore batch limit: 500 writes).
+  const relatedDocs = [
+    ...matchSnap.docs,
+    ...teamRequestSnap.docs,
+    ...transferDocs
+  ];
+  for (let i = 0; i < relatedDocs.length; i += 450) {
+    const batch = db.batch();
+    relatedDocs.slice(i, i + 450).forEach(docSnap => batch.delete(docSnap.ref));
+    await batch.commit();
+  }
+
+  await leagueRef.delete();
+
+  await db.collection('adminAudit').add({
+    action: 'league_cascade_deleted',
+    leagueId: id,
+    leagueName: text(leagueSnap.data()?.name, 160),
+    deletedTeams: teamSnap.size,
+    deletedMatches: matchSnap.size,
+    deletedTeamRequests: teamRequestSnap.size,
+    deletedTransferRequests: transferDocs.length,
+    actorUid: request.auth.uid,
+    createdAt: FieldValue.serverTimestamp()
   });
-  return { ok: true };
+
+  return {
+    ok: true,
+    message: `Competición eliminada. Se eliminaron ${teamSnap.size} equipos, ${matchSnap.size} encuentros y sus registros relacionados. Los perfiles de jugadores y cuentas de usuario se conservaron.`
+  };
 });
 
 exports.reviewTeamRequest = onCall({ region: REGION }, async (request) => {
