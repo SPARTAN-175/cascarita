@@ -380,22 +380,98 @@ exports.importTestLeague = onCall({ region: REGION, cors: ['https://spartan-175.
   const playerIds=new Set(players.map(p=>String(p.id))); if(playerIds.size!==320)throw new HttpsError('invalid-argument','Hay identificadores de jugador duplicados.');
   const playerCounts=new Map(); for(const p of players){if(!teamIds.has(String(p.teamId)))throw new HttpsError('invalid-argument','Hay jugadores asociados a un equipo inexistente.');playerCounts.set(p.teamId,(playerCounts.get(p.teamId)||0)+1);if(!p.name||!p.position)throw new HttpsError('invalid-argument','Cada jugador debe tener nombre y posición.');}
   if(teams.some(t=>playerCounts.get(t.id)!==20))throw new HttpsError('invalid-argument','Cada equipo debe tener exactamente 20 jugadores.');
-  await db.runTransaction(async tx=>{const b=await tx.get(batchRef);if(b.exists)throw new HttpsError('already-exists','El lote ya existe.');tx.create(batchRef,{batchId,leagueId,leagueName:text(league.name,120),status:'importing',teamCount:16,playerCount:320,createdBy:adminUid,createdAt:FieldValue.serverTimestamp(),isTestData:true});});
+  await db.runTransaction(async tx=>{const b=await tx.get(batchRef);if(b.exists)throw new HttpsError('already-exists','El lote ya existe.');tx.create(batchRef,{batchId,leagueId,leagueName:text(league.name,120),status:'importing',approvalStatus:'pending',teamCount:16,playerCount:320,createdBy:adminUid,createdAt:FieldValue.serverTimestamp(),isTestData:true});});
   try{
     const teamDocIds=new Map(); teams.forEach(t=>teamDocIds.set(t.id,`${safeDocId(batchId,40)}_${safeDocId(t.id,60)}`));
     const playerDocIds=new Map(); players.forEach(p=>playerDocIds.set(p.id,`${safeDocId(batchId,40)}_${safeDocId(p.id,60)}`));
     const writes=[];
-    for(const t of teams){const id=teamDocIds.get(t.id), rosterIds=players.filter(p=>p.teamId===t.id).map(p=>playerDocIds.get(p.id));writes.push({ref:db.collection('teams').doc(id),data:{...t,id,sourceId:t.id,roster:rosterIds,leagueId,leagueName:league.name,leagueStatus:'approved',status:'active',managerUid:adminUid,createdBy:adminUid,isTestData:true,testBatchId:batchId,createdAt:FieldValue.serverTimestamp()}});}
-    for(const p of players){const id=playerDocIds.get(p.id), teamId=teamDocIds.get(p.teamId), teamName=teams.find(t=>t.id===p.teamId).name;writes.push({ref:db.collection('players').doc(id),data:{...p,id,sourceId:p.id,teamId,teamName,leagueId,visibility:'public',isTestData:true,testBatchId:batchId,createdAt:FieldValue.serverTimestamp()}});writes.push({ref:db.collection('teams').doc(teamId).collection('roster').doc(id),data:{playerId:id,sourceId:p.id,displayName:text(p.name,100),position:text(p.position,60),number:Number(p.number||p.jerseyNumber||0),status:'active',isTestData:true,testBatchId:batchId,joinedAt:FieldValue.serverTimestamp()}});}
+    for(const t of teams){const id=teamDocIds.get(t.id), rosterIds=players.filter(p=>p.teamId===t.id).map(p=>playerDocIds.get(p.id));writes.push({ref:db.collection('teams').doc(id),data:{...t,id,sourceId:t.id,roster:rosterIds,leagueId,leagueName:league.name,leagueStatus:'pending',status:'pending_approval',approvalStatus:'pending',managerUid:adminUid,createdBy:adminUid,isTestData:true,testBatchId:batchId,createdAt:FieldValue.serverTimestamp()}});}
+    for(const p of players){const id=playerDocIds.get(p.id), teamId=teamDocIds.get(p.teamId), teamName=teams.find(t=>t.id===p.teamId).name;writes.push({ref:db.collection('players').doc(id),data:{...p,id,sourceId:p.id,teamId,teamName,leagueId,visibility:'pending',isTestData:true,testBatchId:batchId,createdAt:FieldValue.serverTimestamp()}});writes.push({ref:db.collection('teams').doc(teamId).collection('roster').doc(id),data:{playerId:id,sourceId:p.id,displayName:text(p.name,100),position:text(p.position,60),number:Number(p.number||p.jerseyNumber||0),status:'active',isTestData:true,testBatchId:batchId,joinedAt:FieldValue.serverTimestamp()}});}
     const fixtureTeams=teams.map(t=>({id:teamDocIds.get(t.id),name:text(t.name,100)}));
     const fixtures=makeRoundRobin(fixtureTeams,Number(payload.competition?.legs)===1?1:2);
-    for(let i=0;i<fixtures.length;i++){const m=fixtures[i],id=`${safeDocId(batchId,40)}_MATCH_${String(i+1).padStart(3,'0')}`;writes.push({ref:db.collection('matches').doc(id),data:{leagueId,leagueName:league.name,homeTeam:m.home.name,awayTeam:m.away.name,homeTeamId:m.home.id,awayTeamId:m.away.id,round:m.round,status:'scheduled',kickoff:null,homeGoals:null,awayGoals:null,generated:true,isTestData:true,testBatchId:batchId,createdBy:adminUid,createdAt:FieldValue.serverTimestamp()}});}
+    for(let i=0;i<fixtures.length;i++){const m=fixtures[i],id=`${safeDocId(batchId,40)}_MATCH_${String(i+1).padStart(3,'0')}`;writes.push({ref:db.collection('matches').doc(id),data:{leagueId,leagueName:league.name,homeTeam:m.home.name,awayTeam:m.away.name,homeTeamId:m.home.id,awayTeamId:m.away.id,round:m.round,status:'pending_approval',approvalStatus:'pending',kickoff:null,homeGoals:null,awayGoals:null,generated:true,isTestData:true,testBatchId:batchId,createdBy:adminUid,createdAt:FieldValue.serverTimestamp()}});}
     for(let i=0;i<writes.length;i+=400){const batch=db.batch();for(const w of writes.slice(i,i+400))batch.create(w.ref,w.data);await batch.commit();}
-    await batchRef.update({status:'complete',fixtureCount:fixtures.length,roundCount:Math.max(...fixtures.map(x=>x.round)),completedAt:FieldValue.serverTimestamp()});
+    await batchRef.update({status:'awaiting_approval',approvalStatus:'pending',fixtureCount:fixtures.length,roundCount:Math.max(...fixtures.map(x=>x.round)),completedAt:FieldValue.serverTimestamp()});
     await leagueRef.set({testDataImported:true,testDataBatchId:batchId},{merge:true});
     return {ok:true,teams:16,players:320,matches:fixtures.length,message:`Importación completada: 16 equipos, 320 jugadores y ${fixtures.length} partidos.`};
   }catch(e){await batchRef.set({status:'failed',error:text(e.message,300),failedAt:FieldValue.serverTimestamp()},{merge:true});throw e instanceof HttpsError?e:new HttpsError('internal',e.message||'Falló la importación. Puedes limpiar el lote parcial desde el laboratorio.');}
 });
+
+// Revisión de equipos/lotes del laboratorio. Solo modifica datos marcados explícitamente como prueba.
+exports.adminReviewTestData = onCall({ region: REGION, cors: ['https://spartan-175.github.io'], timeoutSeconds: 540, memory: '1GiB' }, async (request) => {
+  const adminUid = requireSuperadmin(request);
+  const batchId = text(request.data?.batchId, 100);
+  const teamId = text(request.data?.teamId, 128);
+  const action = request.data?.action;
+  if (!['pending', 'approved', 'rejected'].includes(action) || (!!batchId === !!teamId)) {
+    throw new HttpsError('invalid-argument', 'Indica un lote o equipo de prueba y una decisión válida.');
+  }
+  let batchIdResolved = batchId;
+  let teams = [];
+  if (batchId) {
+    const batchRef = db.collection('testImportBatches').doc(safeDocId(batchId));
+    const batchSnap = await batchRef.get();
+    if (!batchSnap.exists || batchSnap.data().isTestData !== true) throw new HttpsError('not-found', 'No existe un lote de prueba válido.');
+    const teamSnap = await db.collection('teams').where('testBatchId', '==', batchId).get();
+    teams = teamSnap.docs;
+    if (!teams.length) throw new HttpsError('failed-precondition', 'El lote no contiene equipos para revisar.');
+  } else {
+    const teamRef = db.collection('teams').doc(teamId);
+    const teamSnap = await teamRef.get();
+    if (!teamSnap.exists) throw new HttpsError('not-found', 'Equipo no encontrado.');
+    const team = teamSnap.data();
+    if (team.isTestData !== true || !team.testBatchId) throw new HttpsError('failed-precondition', 'Esta acción solo está disponible para equipos marcados como datos de prueba.');
+    batchIdResolved = team.testBatchId;
+    teams = [teamSnap];
+  }
+  const teamIds = new Set(teams.map(d => d.id));
+  const status = action === 'approved' ? 'active' : action === 'pending' ? 'pending_approval' : 'rejected';
+  const approvalFields = action === 'approved'
+    ? { approvalStatus: 'approved', leagueStatus: 'approved', status, approvedAt: FieldValue.serverTimestamp(), approvedBy: adminUid, rejectedAt: FieldValue.delete() }
+    : action === 'pending'
+      ? { approvalStatus: 'pending', leagueStatus: 'pending', status, approvalRequestedAt: FieldValue.serverTimestamp(), approvedAt: FieldValue.delete(), rejectedAt: FieldValue.delete() }
+      : { approvalStatus: 'rejected', leagueStatus: 'rejected', status, rejectedAt: FieldValue.serverTimestamp(), rejectedBy: adminUid, approvedAt: FieldValue.delete() };
+  for (let i = 0; i < teams.length; i += 400) {
+    const batch = db.batch();
+    teams.slice(i, i + 400).forEach(d => batch.update(d.ref, { ...approvalFields, reviewedAt: FieldValue.serverTimestamp(), reviewedBy: adminUid, updatedAt: FieldValue.serverTimestamp() }));
+    await batch.commit();
+  }
+  const players = batchId
+    ? await db.collection('players').where('testBatchId', '==', batchIdResolved).get()
+    : await db.collection('players').where('teamId', '==', teamId).where('testBatchId', '==', batchIdResolved).get();
+  for (let i = 0; i < players.docs.length; i += 400) {
+    const batch = db.batch();
+    players.docs.slice(i, i + 400).forEach(d => {
+      if (batchId || teamIds.has(String(d.data().teamId))) batch.update(d.ref, { visibility: action === 'approved' ? 'public' : 'pending', approvalStatus: action, updatedAt: FieldValue.serverTimestamp() });
+    });
+    await batch.commit();
+  }
+  const matchSnap = await db.collection('matches').where('testBatchId', '==', batchIdResolved).get();
+  const approvedTeams = new Set();
+  const allBatchTeams = await db.collection('teams').where('testBatchId', '==', batchIdResolved).get();
+  allBatchTeams.docs.forEach(d => {
+    const next = teamIds.has(d.id) ? action : (d.data().approvalStatus || (d.data().status === 'active' ? 'approved' : 'pending'));
+    if (next === 'approved') approvedTeams.add(d.id);
+  });
+  for (let i = 0; i < matchSnap.docs.length; i += 400) {
+    const batch = db.batch();
+    matchSnap.docs.slice(i, i + 400).forEach(d => {
+      const m = d.data();
+      const bothApproved = approvedTeams.has(String(m.homeTeamId)) && approvedTeams.has(String(m.awayTeamId));
+      batch.update(d.ref, { approvalStatus: bothApproved ? 'approved' : 'pending', updatedAt: FieldValue.serverTimestamp() });
+    });
+    await batch.commit();
+  }
+  if (batchId) {
+    await db.collection('testImportBatches').doc(safeDocId(batchId)).set({ approvalStatus: action, reviewedAt: FieldValue.serverTimestamp(), reviewedBy: adminUid }, { merge: true });
+  } else {
+    const approvedCount = approvedTeams.size;
+    await db.collection('testImportBatches').doc(safeDocId(batchIdResolved)).set({ approvalStatus: approvedCount === allBatchTeams.size ? 'approved' : approvedCount === 0 ? action : 'partial', reviewedAt: FieldValue.serverTimestamp(), reviewedBy: adminUid }, { merge: true });
+  }
+  await db.collection('adminAudit').add({ action: 'test_data_reviewed', decision: action, batchId: batchIdResolved, teamIds: [...teamIds], actorUid: adminUid, createdAt: FieldValue.serverTimestamp() });
+  return { ok: true, teams: teams.length, players: players.size, message: action === 'approved' ? `Se aprobaron ${teams.length} equipo(s). Los jugadores quedaron visibles y los encuentros entre equipos aprobados se habilitaron.` : action === 'pending' ? `${teams.length} equipo(s) quedaron pendientes de aprobación. Sus jugadores y encuentros permanecen ocultos al público.` : `${teams.length} equipo(s) fueron rechazados. Los datos se conservaron para revisión; no se eliminó nada.` };
+});
+
 exports.cleanupTestImport = onCall({ region: REGION, cors: ['https://spartan-175.github.io'], timeoutSeconds: 540, memory: '1GiB' }, async (request) => {
   const adminUid=requireSuperadmin(request), batchId=text(request.data?.batchId,100); if(!batchId)throw new HttpsError('invalid-argument','Falta el identificador del lote.');
   const batchRef=db.collection('testImportBatches').doc(safeDocId(batchId)); const meta=await batchRef.get(); if(!meta.exists)throw new HttpsError('not-found','No existe ese lote de pruebas.');
