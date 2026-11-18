@@ -226,3 +226,15 @@
 .club-unscheduled-match small{color:var(--muted)}
 @media(max-width:760px){.club-calendar-toolbar{align-items:stretch;flex-direction:column}.club-calendar-controls{justify-content:space-between}.club-calendar-day{min-height:92px;padding:5px}.club-calendar-event{padding:4px;margin:3px 0}.club-calendar-event b{font-size:.6rem}.club-calendar-event small{font-size:.55rem}.club-calendar-weekday{font-size:.68rem;padding:9px 3px}}
 @media(max-width:460px){.club-calendar-day{min-height:76px}.club-calendar-event small{display:none}.club-calendar-event b{font-size:.55rem}.club-calendar-day-number{font-size:.72rem}}
+
+
+/* Estado de aprobación del laboratorio de pruebas */
+.test-approval-pill{display:inline-flex;align-items:center;margin:6px 0 0;padding:4px 9px;border-radius:999px;font-size:.68rem;font-weight:800;letter-spacing:.04em;background:rgba(245,158,11,.13);color:#b7791f}
+.test-approval-pill.approved{background:rgba(34,197,94,.13);color:#16834a}
+.test-approval-pill.rejected{background:rgba(239,68,68,.12);color:#c43d3d}
+.test-approval-pill.sin_revision{background:rgba(148,163,184,.16);color:var(--muted,#77808d)}
+.test-approval-pill.partial{background:rgba(59,130,246,.12);color:#2563eb}
+.test-batch-row{align-items:center;gap:14px}
+.test-batch-row>div:first-child{min-width:180px}
+.admin-team-card .test-approval-pill{margin-left:6px;vertical-align:middle}
+@media(max-width:700px){.test-batch-row{align-items:flex-start;flex-direction:column}.test-batch-row .admin-actions{width:100%;flex-wrap:wrap}}
