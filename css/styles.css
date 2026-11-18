@@ -107,3 +107,35 @@
 .club-team-mini{display:flex;flex-wrap:wrap;gap:8px}
 .club-team-inspector{margin-top:18px}
 .club-team-inspector .panel-head{display:flex;align-items:center;justify-content:space-between}
+
+/* Administración del club: navegación por secciones y distribución adaptable */
+.manager-tabs{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 22px;padding:8px;background:var(--surface);border:1px solid var(--line);border-radius:16px;box-shadow:var(--shadow)}
+.manager-tab{display:inline-flex;align-items:center;gap:9px;padding:11px 15px;border:0;border-radius:11px;background:transparent;color:var(--muted);font-weight:700;transition:.18s ease}
+.manager-tab:hover{background:var(--surface2);color:var(--text)}
+.manager-tab.active{background:var(--greenSoft);color:var(--green)}
+.manager-tab span{font-size:17px}
+.manager-content{display:grid;gap:20px;min-width:0}
+.manager-stats{margin-bottom:20px}
+.manager-content .panel{margin:0;min-width:0}
+.club-dashboard-grid{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(280px,1fr);gap:20px;align-items:start}
+.club-dashboard-grid .panel{height:100%}
+.club-dashboard-main .club-card-grid{grid-template-columns:repeat(auto-fit,minmax(220px,1fr))}
+.club-dashboard-side .history-row{padding:12px 0}
+.club-card-grid,.manager-team-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px}
+.club-admin-card{margin:0;min-width:0}
+.club-admin-card-head{display:flex;align-items:center;gap:14px;margin-bottom:12px}
+.club-admin-card-head img,.club-admin-logo{width:64px;height:64px;object-fit:contain;border-radius:14px;background:var(--surface2);padding:8px;flex:0 0 auto}
+.club-admin-logo{display:grid;place-items:center;font-size:30px}
+.club-team-mini{display:flex;flex-wrap:wrap;gap:8px}
+.club-team-inspector{margin-top:18px}
+.club-team-inspector .panel-head{display:flex;align-items:center;justify-content:space-between}
+.manager-team{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:18px;border:1px solid var(--line);border-radius:15px;background:var(--surface2);min-width:0}
+.manager-team h3{margin:7px 0 5px}.manager-team p{margin:0;color:var(--muted);font-size:13px}
+.section-description{margin:5px 0 0;color:var(--muted);font-size:13px}
+.staff-flow{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:20px 0}
+.staff-flow>div{display:grid;gap:7px;padding:17px;border:1px solid var(--line);border-radius:14px;background:var(--surface2)}
+.staff-flow span{display:grid;place-items:center;width:30px;height:30px;border-radius:9px;background:var(--greenSoft);color:var(--green);font-weight:800}
+.staff-flow small{color:var(--muted);line-height:1.5}
+.compact-stats{margin-top:18px}
+@media(max-width:850px){.club-dashboard-grid{grid-template-columns:1fr}.staff-flow{grid-template-columns:1fr}.manager-team{align-items:flex-start;flex-direction:column}.manager-tabs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr))}.manager-tab{justify-content:center;padding:10px 6px;font-size:12px}}
+@media(max-width:480px){.manager-tabs{grid-template-columns:repeat(2,minmax(0,1fr))}.manager-tab{justify-content:flex-start}.club-card-grid,.manager-team-grid{grid-template-columns:1fr}}
