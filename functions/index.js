@@ -1,7 +1,7 @@
 const { onCall, HttpsError } = require('firebase-functions/v2/https');
 const { initializeApp } = require('firebase-admin/app');
 const { getAuth } = require('firebase-admin/auth');
-const { getFirestore, FieldValue } = require('firebase-admin/firestore');
+const { getFirestore, FieldValue, Timestamp } = require('firebase-admin/firestore');
 
 initializeApp();
 const db = getFirestore();
@@ -61,7 +61,7 @@ exports.adminSaveLeague = onCall({ region: REGION }, async (request) => {
 });
 
 exports.adminDeleteLeague = onCall({ region: REGION, timeoutSeconds: 540, memory: "1GiB" }, async (request) => {
-  requireSuperadmin(request);
+  const actorUid = requireSuperadmin(request);
   const id = text(request.data?.leagueId, 128);
   if (!id) throw new HttpsError('invalid-argument', 'Falta la competición.');
 
@@ -69,34 +69,31 @@ exports.adminDeleteLeague = onCall({ region: REGION, timeoutSeconds: 540, memory
   const leagueSnap = await leagueRef.get();
   if (!leagueSnap.exists) throw new HttpsError('not-found', 'Competición no encontrada.');
 
-  // Gather all directly linked records before deleting anything.
+  // Una competición es independiente de los clubes, equipos y futbolistas.
+  // Al eliminarla solo se desvinculan los equipos y se retiran sus partidos
+  // y solicitudes de inscripción. Los equipos, rosters, jugadores y usuarios
+  // permanecen intactos para que puedan inscribirse en otra liga.
   const [teamSnap, matchSnap, teamRequestSnap] = await Promise.all([
     db.collection('teams').where('leagueId', '==', id).get(),
     db.collection('matches').where('leagueId', '==', id).get(),
     db.collection('teamRequests').where('leagueId', '==', id).get()
   ]);
-  const teamIds = teamSnap.docs.map(d => d.id);
 
-  // Remove transfer requests tied to the affected teams so no orphaned
-  // negotiation requests remain. Player profiles and user accounts are kept.
-  const transferDocs = [];
-  for (const teamId of teamIds) {
-    const snap = await db.collection('transferRequests').where('teamId', '==', teamId).get();
-    transferDocs.push(...snap.docs);
+  // Quitar únicamente la relación con esta competición. No tocar status,
+  // roster, perfiles de players ni documentos de users.
+  for (let i = 0; i < teamSnap.docs.length; i += 450) {
+    const batch = db.batch();
+    teamSnap.docs.slice(i, i + 450).forEach(teamDoc => {
+      batch.update(teamDoc.ref, {
+        leagueId: FieldValue.delete(),
+        leagueName: FieldValue.delete(),
+        updatedAt: FieldValue.serverTimestamp()
+      });
+    });
+    await batch.commit();
   }
 
-  // Delete team documents recursively, including their roster subcollections.
-  for (const teamDoc of teamSnap.docs) {
-    await db.recursiveDelete(teamDoc.ref);
-  }
-
-  // Delete matches, league team requests, and team-linked transfer requests
-  // in safe batches (Firestore batch limit: 500 writes).
-  const relatedDocs = [
-    ...matchSnap.docs,
-    ...teamRequestSnap.docs,
-    ...transferDocs
-  ];
+  const relatedDocs = [...matchSnap.docs, ...teamRequestSnap.docs];
   for (let i = 0; i < relatedDocs.length; i += 450) {
     const batch = db.batch();
     relatedDocs.slice(i, i + 450).forEach(docSnap => batch.delete(docSnap.ref));
@@ -104,22 +101,22 @@ exports.adminDeleteLeague = onCall({ region: REGION, timeoutSeconds: 540, memory
   }
 
   await leagueRef.delete();
-
   await db.collection('adminAudit').add({
-    action: 'league_cascade_deleted',
+    action: 'league_deleted_teams_preserved',
     leagueId: id,
     leagueName: text(leagueSnap.data()?.name, 160),
-    deletedTeams: teamSnap.size,
+    unlinkedTeams: teamSnap.size,
     deletedMatches: matchSnap.size,
     deletedTeamRequests: teamRequestSnap.size,
-    deletedTransferRequests: transferDocs.length,
-    actorUid: request.auth.uid,
+    preservedRosters: true,
+    preservedPlayers: true,
+    actorUid,
     createdAt: FieldValue.serverTimestamp()
   });
 
   return {
     ok: true,
-    message: `Competición eliminada. Se eliminaron ${teamSnap.size} equipos, ${matchSnap.size} encuentros y sus registros relacionados. Los perfiles de jugadores y cuentas de usuario se conservaron.`
+    message: `Competición eliminada. Se conservaron ${teamSnap.size} equipos con sus plantillas y jugadores. Se retiraron ${matchSnap.size} encuentros y ${teamRequestSnap.size} solicitudes vinculadas a esta competición.`
   };
 });
 
@@ -234,6 +231,47 @@ exports.generateLeagueFixtures = onCall({ region: REGION, timeoutSeconds: 540 },
     await leagueRef.set({fixturesGenerationStatus:'failed',fixturesGenerationError:text(e.message,300)}, {merge:true});
     throw e instanceof HttpsError ? e : new HttpsError('internal',e.message || 'No se pudo generar el calendario.');
   }
+});
+
+
+exports.adminUpdateLeagueMatch = onCall({ region: REGION }, async (request) => {
+  const adminUid = requireSuperadmin(request);
+  const matchId = text(request.data?.matchId, 128);
+  const kickoffIso = text(request.data?.kickoffIso, 40);
+  const venue = text(request.data?.venue, 120);
+  const homeRaw = request.data?.homeGoals;
+  const awayRaw = request.data?.awayGoals;
+  if (!matchId) throw new HttpsError('invalid-argument', 'Falta el encuentro.');
+  if (kickoffIso && !/^\d{4}-\d{2}-\d{2}T/.test(kickoffIso)) throw new HttpsError('invalid-argument', 'Fecha y hora inválidas.');
+  const hasHome = homeRaw !== '' && homeRaw !== null && homeRaw !== undefined;
+  const hasAway = awayRaw !== '' && awayRaw !== null && awayRaw !== undefined;
+  if (hasHome !== hasAway) throw new HttpsError('invalid-argument', 'Captura los goles de ambos equipos o deja ambos campos vacíos.');
+  let homeGoals = null, awayGoals = null;
+  if (hasHome && hasAway) {
+    homeGoals = Number(homeRaw); awayGoals = Number(awayRaw);
+    if (!Number.isInteger(homeGoals) || !Number.isInteger(awayGoals) || homeGoals < 0 || awayGoals < 0 || homeGoals > 99 || awayGoals > 99) {
+      throw new HttpsError('invalid-argument', 'Los marcadores deben ser números enteros entre 0 y 99.');
+    }
+  }
+  const matchRef = db.collection('matches').doc(matchId);
+  const matchSnap = await matchRef.get();
+  if (!matchSnap.exists) throw new HttpsError('not-found', 'Encuentro no encontrado.');
+  const match = matchSnap.data();
+  const payload = { venue, updatedAt: FieldValue.serverTimestamp(), updatedBy: adminUid };
+  if (kickoffIso) {
+    const kickoff = new Date(kickoffIso);
+    if (!Number.isFinite(kickoff.getTime())) throw new HttpsError('invalid-argument', 'No se pudo interpretar la fecha y hora.');
+    payload.kickoff = Timestamp.fromDate(kickoff);
+  }
+  if (hasHome && hasAway) {
+    payload.homeGoals = homeGoals; payload.awayGoals = awayGoals;
+    payload.status = 'final'; payload.completedAt = FieldValue.serverTimestamp(); payload.resultEnteredBy = adminUid;
+  } else if (match.status === 'final' || match.status === 'completed' || match.status === 'finished') {
+    payload.homeGoals = null; payload.awayGoals = null; payload.status = 'scheduled';
+    payload.completedAt = FieldValue.delete(); payload.resultEnteredBy = FieldValue.delete();
+  }
+  await matchRef.update(payload);
+  return { ok: true, message: hasHome ? 'Resultado guardado y clasificación actualizada.' : 'Programación del encuentro actualizada.' };
 });
 
 
