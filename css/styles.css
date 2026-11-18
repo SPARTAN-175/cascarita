@@ -139,3 +139,31 @@
 .compact-stats{margin-top:18px}
 @media(max-width:850px){.club-dashboard-grid{grid-template-columns:1fr}.staff-flow{grid-template-columns:1fr}.manager-team{align-items:flex-start;flex-direction:column}.manager-tabs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr))}.manager-tab{justify-content:center;padding:10px 6px;font-size:12px}}
 @media(max-width:480px){.manager-tabs{grid-template-columns:repeat(2,minmax(0,1fr))}.manager-tab{justify-content:flex-start}.club-card-grid,.manager-team-grid{grid-template-columns:1fr}}
+
+
+/* CASCARITA · Administrador de club con la misma identidad visual del panel de jugador */
+.manager-app{min-height:100vh;background:var(--bg);color:var(--text)}
+.manager-app .player-topbar{justify-content:space-between;min-height:68px;padding:.8rem clamp(1rem,3vw,2.6rem)}
+.manager-top-label{display:flex;flex-direction:column;align-items:center;gap:3px;text-align:center}
+.manager-top-label span{font-size:.76rem;font-weight:900;letter-spacing:.14em;color:var(--accent)}
+.manager-top-label small{font-size:.76rem;color:var(--muted)}
+.manager-main{max-width:1480px;margin:0 auto;padding:clamp(1rem,3vw,2.5rem)}
+.manager-main .manager-hero{min-height:250px;border:0;border-radius:28px;padding:clamp(1.4rem,4vw,3.4rem);background:linear-gradient(115deg,#101d31,#243d59);box-shadow:none;margin:0 0 1.2rem}
+.manager-main .manager-hero:before{background:radial-gradient(ellipse at 82% 50%,#ffffff1c,transparent 42%)}
+.manager-main .manager-hero h2{font-size:clamp(2rem,4vw,3.2rem);letter-spacing:-.04em;text-transform:none}
+.manager-main .manager-hero p{font-size:.95rem;max-width:600px;line-height:1.65}
+.manager-main .manager-ball{font-size:clamp(3.5rem,7vw,5.5rem)}
+.manager-quick-grid{margin:1.2rem 0}
+.manager-quick-grid article{min-width:0}
+.manager-quick-grid article b{font-size:1.35rem}
+.manager-main .manager-tabs{display:flex;gap:.25rem;flex-wrap:wrap;padding:0;margin:1.2rem 0;border:0;border-radius:0;background:transparent;box-shadow:none;border-bottom:1px solid var(--line)}
+.manager-main .manager-tab{padding:.85rem 1rem;border-radius:12px 12px 0 0;border-bottom:3px solid transparent;color:var(--muted);font:inherit;font-size:.88rem;font-weight:700}
+.manager-main .manager-tab:hover{background:var(--surface-2);color:var(--accent)}
+.manager-main .manager-tab.active{background:transparent;color:var(--accent);border-bottom-color:var(--accent)}
+.manager-main .manager-content{gap:1.2rem}
+.manager-main .manager-content .panel,.manager-main .manager-content .league-card,.manager-main .manager-content .manager-team{border-radius:18px}
+.manager-main .manager-content .panel{padding:clamp(1rem,2vw,1.5rem);box-shadow:none}
+.manager-main .manager-team{padding:1rem;background:var(--surface);border:1px solid var(--line)}
+.manager-main .staff-flow>div{border-radius:16px;background:var(--surface)}
+.manager-main .club-admin-card-head img,.manager-main .club-admin-logo{border-radius:18px}
+@media(max-width:760px){.manager-app .player-topbar{gap:.6rem}.manager-top-label{align-items:flex-end}.manager-top-label span{font-size:.62rem}.manager-top-label small{font-size:.68rem}.manager-main .manager-hero{min-height:200px;padding:1.4rem;border-radius:22px}.manager-main .manager-tabs{overflow-x:auto;flex-wrap:nowrap}.manager-main .manager-tab{white-space:nowrap;flex:0 0 auto;padding:.75rem .8rem;font-size:.8rem}.manager-quick-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
