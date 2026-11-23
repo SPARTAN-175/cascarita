@@ -114,3 +114,10 @@ CORRECCIÓN V11 - ALTAS DE FAMILIAS
 - Al recuperar conexión e iniciar sesión como administrador, se reintentan las altas pendientes.
 - Si Firebase rechaza una escritura, la familia permanece guardada localmente y el estado muestra el motivo.
 - Para guardar familias en la nube, el administrador debe iniciar sesión con avengers_0077@hotmail.com y tener publicadas las reglas incluidas.
+
+
+CORRECCIÓN V12 - ERROR AL AGREGAR FAMILIAS
+- Corregido ReferenceError: referencia is not defined. La variable del formulario se llama reference y ahora se guarda en la propiedad referencia.
+- Las nuevas familias guardan familia, referencia, mesa, pases y código único.
+- La edición conserva el mismo código y actualiza los campos modificados.
+- Guardado local primero; sincronización en Firebase cuando hay sesión de administrador y conexión.
