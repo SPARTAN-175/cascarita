@@ -107,3 +107,10 @@ VERSIÓN 9 - ADMINISTRACIÓN DE MESAS
 - Las mesas agregadas se guardan localmente y se sincronizan en Firebase al tener conexión y sesión de administrador.
 - Se añadió la regla Firestore weddingTables: lectura para usuarios autenticados y escritura solo para el administrador. Publica las nuevas reglas incluidas en firestore.rules.
 - La lista y las mesas permanecen disponibles en el dispositivo sin Internet.
+
+
+CORRECCIÓN V11 - ALTAS DE FAMILIAS
+- Se corrigió la sincronización para conservar en la lista local las familias nuevas pendientes que aún no existen en Firestore.
+- Al recuperar conexión e iniciar sesión como administrador, se reintentan las altas pendientes.
+- Si Firebase rechaza una escritura, la familia permanece guardada localmente y el estado muestra el motivo.
+- Para guardar familias en la nube, el administrador debe iniciar sesión con avengers_0077@hotmail.com y tener publicadas las reglas incluidas.
