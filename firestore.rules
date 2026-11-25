@@ -9,10 +9,12 @@ service cloud.firestore {
 
   match /users/{uid} {
    allow read: if signed() && (request.auth.uid==uid || superadmin());
-   // El registro público solo puede crear perfiles DT. Los roles privilegiados se asignan fuera del cliente.
+   // El registro público admite DT, administrador de club y jugador.
+   // Organizer y superadmin se asignan únicamente mediante autorización administrativa.
    allow create: if signed() && request.auth.uid==uid && request.resource.data.uid==uid
-     && request.resource.data.profileType=='team_manager'
-     && request.resource.data.roles==['team_manager']
+     && request.resource.data.profileType in ['team_manager','club_admin','player']
+     && request.resource.data.roles.size()==1
+     && request.resource.data.roles[0]==request.resource.data.profileType
      && request.resource.data.accountStatus=='active';
    allow update: if signed() && request.auth.uid==uid
      && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['displayName','phone','updatedAt']);

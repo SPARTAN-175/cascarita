@@ -23,3 +23,5 @@
 .background-thumb span{color:white;font-size:12px;font-weight:800;text-shadow:0 1px 4px #000}
 .background-card small{font-size:11px}
 @media(max-width:700px){#dashboard main.has-dashboard-bg{background-attachment:scroll}.background-preview{height:160px}}
+
+.password-wrap{display:flex;gap:6px;align-items:stretch}.password-wrap input{flex:1;min-width:0}.password-toggle{border:1px solid #dfe5ee;background:#f7f9fc;border-radius:10px;padding:0 12px;color:#2864e8;font-size:11px;font-weight:700}.auth-card select{padding:12px;border:1px solid #dfe5ee;border-radius:10px;background:#fff;font:inherit;color:#172033}

@@ -114,3 +114,14 @@ Las reglas actuales bloquean la creación de solicitudes de clubes y equipos des
 
 ## Alcance real de esta entrega
 El panel del superadministrador, el formulario de creación de ligas y el módulo de fondos por perfil están implementados en la interfaz y conectados a Firestore/Storage. Las bandejas permiten revisar documentos existentes. Aún no existe la interfaz para que el administrador de club cree y envíe esas solicitudes. La gestión deportiva del DT también sigue pendiente hasta que se integre un equipo aprobado y una plantilla real.
+
+
+## Actualización 1.3 (parche de interfaz y registro)
+- El registro permite elegir entre Director técnico, Administrador de club y Jugador.
+- Superadministrador y Organizador deportivo no se pueden crear desde el registro público; requieren autorización administrativa.
+- Se agregan vistas iniciales diferenciadas para Administrador de club y Jugador; sus módulos operativos aún se desarrollarán por etapas.
+- Se agrega control para mostrar/ocultar contraseña en inicio de sesión y registro.
+- Se agregan favicon SVG e ICO para evitar el 404 de favicon.
+- `firestore.rules` cambia para permitir la creación pública únicamente de los tres perfiles indicados. Publica esta regla actualizada en Firebase Console > Firestore Database > Rules.
+
+Este ZIP es un parche: conserva la estructura existente. Copia los archivos incluidos sobre los mismos archivos del repositorio y agrega los favicons nuevos. No reemplaces otros archivos.
