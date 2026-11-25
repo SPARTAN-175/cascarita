@@ -1,0 +1,80 @@
+rules_version = '2';
+service cloud.firestore {
+ match /databases/{database}/documents {
+  function signed(){return request.auth!=null;}
+  function userData(){return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;}
+  function superadmin(){return signed() && userData().roles.hasAny(['superadmin']) && userData().accountStatus=='active';}
+  function active(){return signed() && userData().accountStatus=='active';}
+  function teamStaffMember(teamId){return signed() && exists(/databases/$(database)/documents/teamStaff/$(teamId + '_' + request.auth.uid)) && get(/databases/$(database)/documents/teamStaff/$(teamId + '_' + request.auth.uid)).data.status=='active';}
+
+  match /users/{uid} {
+   allow read: if signed() && (request.auth.uid==uid || superadmin());
+   // El registro público solo puede crear perfiles DT. Los roles privilegiados se asignan fuera del cliente.
+   allow create: if signed() && request.auth.uid==uid && request.resource.data.uid==uid
+     && request.resource.data.profileType=='team_manager'
+     && request.resource.data.roles==['team_manager']
+     && request.resource.data.accountStatus=='active';
+   allow update: if signed() && request.auth.uid==uid
+     && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['displayName','phone','updatedAt']);
+   allow delete: if superadmin();
+  }
+
+  match /teamInvitations/{id} {
+   allow read: if signed() && (resource.data.recipientUid==request.auth.uid || superadmin());
+   // La creación se habilitará desde backend cuando exista el panel de clubes.
+   allow create,delete: if false;
+   allow update: if signed() && resource.data.recipientUid==request.auth.uid
+     && resource.data.status=='pending'
+     && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status','respondedAt'])
+     && request.resource.data.status in ['accepted','rejected'];
+  }
+  match /teamStaff/{id} {
+   allow read: if signed() && (resource.data.uid==request.auth.uid || superadmin());
+   allow create: if signed() && request.resource.data.uid==request.auth.uid
+     && request.resource.data.status=='active'
+     && exists(/databases/$(database)/documents/teamInvitations/$(request.resource.data.sourceInvitationId))
+     && get(/databases/$(database)/documents/teamInvitations/$(request.resource.data.sourceInvitationId)).data.recipientUid==request.auth.uid
+     && getAfter(/databases/$(database)/documents/teamInvitations/$(request.resource.data.sourceInvitationId)).data.status=='accepted';
+   allow update,delete: if superadmin();
+  }
+
+  // Bandejas de revisión: por ahora solo el superadministrador puede consultarlas.
+  // Las solicitudes serán creadas por el módulo de clubes en una etapa posterior.
+  match /clubRequests/{id} {
+   allow read: if superadmin();
+   allow create,delete: if false;
+   allow update: if superadmin()
+     && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status','reviewedAt','reviewedBy'])
+     && request.resource.data.status in ['approved','rejected'];
+  }
+  match /teamRequests/{id} {
+   allow read: if superadmin();
+   allow create,delete: if false;
+   allow update: if superadmin()
+     && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status','reviewedAt','reviewedBy'])
+     && request.resource.data.status in ['approved','rejected'];
+  }
+  match /clubs/{id} {
+   allow read: if active();
+   allow create,update,delete: if superadmin();
+  }
+  match /teams/{id} {
+   allow read: if active() && (teamStaffMember(id) || superadmin());
+   allow create,update,delete: if superadmin();
+  }
+  match /leagues/{id} {
+   allow read: if active();
+   allow create,update,delete: if superadmin();
+  }
+  match /platformSettings/{settingId} {
+   allow read: if active() && settingId=='profileBackgrounds';
+   allow create,update,delete: if superadmin() && settingId=='profileBackgrounds';
+  }
+
+  match /teamRoster/{id} {
+   allow read: if signed() && (teamStaffMember(resource.data.teamId) || resource.data.playerUid==request.auth.uid || superadmin());
+   allow write: if superadmin();
+  }
+  match /{doc=**} {allow read,write: if false;}
+ }
+}

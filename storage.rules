@@ -1,0 +1,19 @@
+rules_version = '2';
+service firebase.storage {
+ match /b/{bucket}/o {
+  function signed(){return request.auth!=null;}
+  function active(){return signed() && firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.accountStatus=='active';}
+  function superadmin(){return active() && firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.roles.hasAny(['superadmin']);}
+  match /users/{uid}/{path=**} {
+   allow read: if signed() && request.auth.uid==uid;
+   allow write: if signed() && request.auth.uid==uid && request.resource!=null && request.resource.contentType.matches('image/.*') && request.resource.size<5*1024*1024;
+  }
+  match /platform/profile-backgrounds/{role}/{fileName} {
+   allow read: if active();
+   allow create,update: if superadmin() && request.resource!=null && request.resource.contentType.matches('image/(jpeg|png|webp)') && request.resource.size<5*1024*1024;
+   allow delete: if superadmin();
+  }
+  match /clubs/{id}/{path=**} {allow read,write: if false;}
+  match /teams/{id}/{path=**} {allow read,write: if false;}
+ }
+}

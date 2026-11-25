@@ -1,9 +1,2 @@
-// Configuración web de Firebase para CASCARITA.
-export const firebaseConfig = {
-  apiKey: "AIzaSyDJY9uWc0TU6Uy9veFvi0tzJv3sB-HmlQg",
-  authDomain: "cascarita-platform.firebaseapp.com",
-  projectId: "cascarita-platform",
-  storageBucket: "cascarita-platform.firebasestorage.app",
-  messagingSenderId: "1053340441055",
-  appId: "1:1053340441055:web:27ba90e7abc928fc310c6a"
-};
+// Sustituye estos valores por la configuración de tu aplicación web de Firebase.
+export const firebaseConfig={apiKey:"REEMPLAZAR_API_KEY",authDomain:"REEMPLAZAR_PROJECT_ID.firebaseapp.com",projectId:"REEMPLAZAR_PROJECT_ID",storageBucket:"REEMPLAZAR_PROJECT_ID.appspot.com",messagingSenderId:"REEMPLAZAR_MESSAGING_SENDER_ID",appId:"REEMPLAZAR_APP_ID"};
