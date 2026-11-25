@@ -1,0 +1,13 @@
+PARCHE DE CONFIGURACIÓN FIREBASE - CASCARITA
+
+Contenido:
+- js/firebase-config.js
+
+Instalación:
+1. Descomprime el ZIP en la carpeta raíz de tu proyecto CASCARITA.
+2. Acepta reemplazar js/firebase-config.js.
+3. No reemplaces otros archivos ni vuelvas a inicializar Firebase en este archivo.
+4. Publica los archivos actualizados de tu proyecto en GitHub Pages.
+
+La aplicación ya inicializa Firebase desde js/app.js e importa firebaseConfig desde este archivo.
+Esta configuración corresponde al proyecto cascarita-platform.
